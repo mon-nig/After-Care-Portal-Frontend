@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "../contexts/auth-context";
 import { getTrackingInfo } from "../lib/api";
 
@@ -10,25 +11,30 @@ interface TrackingItem {
   currentStage: string;
   updatedAt: string;
   submittedAt: string;
-  deceasedName: string;
+  record: string;
 }
 
 const stageLabels: Record<string, string> = {
   SUBMITTED_BY_GN: "Submitted by GN",
+  SUBMITTED_BY_REGISTRAR: "Submitted by Registrar",
   REVIEW_BY_REGISTRAR: "Under Registrar Review",
   APPROVED: "Approved",
+  COMPLETED: "Completed",
   READY_FOR_PICKUP: "Ready for Pickup",
 };
 
 const stageColors: Record<string, string> = {
   SUBMITTED_BY_GN: "bg-yellow-100 text-yellow-800",
+  SUBMITTED_BY_REGISTRAR: "bg-indigo-100 text-indigo-800",
   REVIEW_BY_REGISTRAR: "bg-blue-100 text-blue-800",
   APPROVED: "bg-green-100 text-green-800",
+  COMPLETED: "bg-emerald-100 text-emerald-800",
   READY_FOR_PICKUP: "bg-purple-100 text-purple-800",
 };
 
 export function FormTracker() {
   const { currentNicNo } = useAuth();
+  const router = useRouter();
   const [items, setItems] = useState<TrackingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -41,9 +47,12 @@ export function FormTracker() {
 
     const fetchData = async () => {
       try {
+        console.log("[FormTracker] Fetching tracking for nicNo:", currentNicNo);
         const data = await getTrackingInfo(currentNicNo);
+        console.log("[FormTracker] Received data:", data);
         setItems(data);
       } catch (err) {
+        console.error("[FormTracker] API Error:", err);
         setError("Failed to load your forms. Please try again later.");
       } finally {
         setLoading(false);
@@ -103,7 +112,7 @@ export function FormTracker() {
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="text-left py-3 px-4 font-semibold text-gray-600">Form</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-600">Deceased / Record</th>
+                <th className="text-left py-3 px-4 font-semibold text-gray-600">Record</th>
                 <th className="text-left py-3 px-4 font-semibold text-gray-600">Submitted</th>
                 <th className="text-left py-3 px-4 font-semibold text-gray-600">Last Updated</th>
                 <th className="text-left py-3 px-4 font-semibold text-gray-600">Status</th>
@@ -111,12 +120,26 @@ export function FormTracker() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {items.map((item) => (
-                <tr key={`${item.formType}-${item.formId}`} className="hover:bg-gray-50 transition-colors">
+                <tr
+                    key={`${item.formType}-${item.formId}`}
+                    className={`hover:bg-gray-50 transition-colors ${item.currentStage === "COMPLETED" && item.formType === "CR02" ? "cursor-pointer" : ""}`}
+                    onClick={() => {
+                      if (item.currentStage === "COMPLETED" && item.formType === "CR02") {
+                        router.push(`/view-cr02/${item.formId}`);
+                      }
+                    }}
+                  >
                   <td className="py-3 px-4">
                     <span className="font-mono font-medium text-gray-800">{item.formType}</span>
                     <span className="text-gray-400 ml-1">#{item.formId}</span>
                   </td>
-                  <td className="py-3 px-4 text-gray-700">{item.deceasedName}</td>
+                  <td className="py-3 px-4 text-gray-700">
+                    {item.currentStage === "COMPLETED" && item.formType === "CR02" ? (
+                      <span className="text-blue-600 underline hover:text-blue-800">{item.record}</span>
+                    ) : (
+                      item.record
+                    )}
+                  </td>
                   <td className="py-3 px-4 text-gray-600 whitespace-nowrap">
                     {item.submittedAt ? new Date(item.submittedAt).toLocaleString("en-LK", {
                       year: "numeric", month: "short", day: "numeric",

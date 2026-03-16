@@ -8,11 +8,14 @@ import { B24Form } from "../components/B24-report/b24-form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { NotificationBell } from "../components/NotificationBell";
 import { FormTracker } from "../components/FormTracker";
+import { RecordHistoryModal } from "../components/RecordHistoryModal";
+import { History } from "lucide-react";
 
 export default function Page() {
   const { currentRole, setCurrentRole, currentUsername } = useAuth();
   const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   // GN/GRAMA_NILADHARI can ONLY see B24 (no CR02)
   const canViewB24 = ["GN", "GRAMA_NILADHARI"].includes(currentRole);
@@ -51,9 +54,18 @@ export default function Page() {
           </div>
           <div className="flex items-center gap-4">
             <NotificationBell />
+            {(canViewB24 || canViewCR2) && (
+              <button
+                onClick={() => setHistoryOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 hover:text-[#4a7c9f] transition-colors"
+              >
+                <History className="size-4" />
+                History
+              </button>
+            )}
             <button 
               onClick={handleLogout}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-4 py-2 text-sm font-bold text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"
             >
               Log Out
             </button>
@@ -100,6 +112,16 @@ export default function Page() {
         </div>
 
       </div>
+
+      {/* Record History Modal */}
+      {(canViewB24 || canViewCR2) && (
+        <RecordHistoryModal
+          isOpen={historyOpen}
+          onClose={() => setHistoryOpen(false)}
+          role={canViewB24 ? "GN" : "REGISTRAR"}
+          username={currentUsername || ""}
+        />
+      )}
     </main>
   );
 }

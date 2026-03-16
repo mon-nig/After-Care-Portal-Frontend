@@ -102,6 +102,7 @@ export default function RegisterPage() {
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">Username</label>
               <input
                 type="text"
+                autoComplete="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 disabled={isLoading}
@@ -115,6 +116,7 @@ export default function RegisterPage() {
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">Full Name</label>
               <input
                 type="text"
+                autoComplete="name"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 disabled={isLoading}
@@ -128,6 +130,7 @@ export default function RegisterPage() {
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">Email</label>
               <input
                 type="email"
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={isLoading}
@@ -141,6 +144,7 @@ export default function RegisterPage() {
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">Password</label>
               <input
                 type="password"
+                autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isLoading}

@@ -8,8 +8,10 @@ import { DeathDetailsSection } from "./death-details-section"
 import { CertificationSection } from "./certification-section"
 import { CheckCircle2, AlertCircle } from "lucide-react"
 import { submitB24Form, fetchRegistrars } from "../../lib/api"
+import { useAuth } from "../../contexts/auth-context"
 
 export function B24Form() {
+  const { currentUsername } = useAuth()
   const [formData, setFormData] = useState<Record<string, string>>({})
   const [submitted, setSubmitted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -33,10 +35,11 @@ export function B24Form() {
     setError(null)
     
     try {
-      await submitB24Form(formData)
+      await submitB24Form({ ...formData, submittedByUsername: currentUsername || "" })
       setSubmitted(true)
-    } catch (err) {
-      setError("Failed to connect to the server. Please try again later.")
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to connect to the server.";
+      setError(message)
     } finally {
       setIsSubmitting(false)
     }
