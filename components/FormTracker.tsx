@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAuth } from "@/contexts/auth-context";
-import { getTrackingInfo } from "@/lib/api";
-import { FileText, Search, CheckCircle2, Package } from "lucide-react";
+import { useAuth } from "../contexts/auth-context";
+import { getTrackingInfo } from "../lib/api";
 
-interface TrackingRecord {
+interface TrackingItem {
   formId: number;
   formType: string;
   currentStage: string;
@@ -14,112 +13,133 @@ interface TrackingRecord {
   deceasedName: string;
 }
 
+const stageLabels: Record<string, string> = {
+  SUBMITTED_BY_GN: "Submitted by GN",
+  REVIEW_BY_REGISTRAR: "Under Registrar Review",
+  APPROVED: "Approved",
+  READY_FOR_PICKUP: "Ready for Pickup",
+};
+
+const stageColors: Record<string, string> = {
+  SUBMITTED_BY_GN: "bg-yellow-100 text-yellow-800",
+  REVIEW_BY_REGISTRAR: "bg-blue-100 text-blue-800",
+  APPROVED: "bg-green-100 text-green-800",
+  READY_FOR_PICKUP: "bg-purple-100 text-purple-800",
+};
+
 export function FormTracker() {
-  const { currentRole, currentUserId } = useAuth();
-  const [trackingRecords, setTrackingRecords] = useState<TrackingRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { currentNicNo } = useAuth();
+  const [items, setItems] = useState<TrackingItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (currentRole !== "FAMILY" || !currentUserId) return;
+    if (!currentNicNo) {
+      setLoading(false);
+      return;
+    }
 
-    let mounted = true;
-
-    const fetchTracking = async () => {
+    const fetchData = async () => {
       try {
-        const data = await getTrackingInfo(currentUserId);
-        if (mounted) {
-          setTrackingRecords(data);
-        }
+        const data = await getTrackingInfo(currentNicNo);
+        setItems(data);
       } catch (err) {
-        console.error("Failed to fetch tracking data", err);
+        setError("Failed to load your forms. Please try again later.");
       } finally {
-        if (mounted) setIsLoading(false);
+        setLoading(false);
       }
     };
 
-    fetchTracking();
-    const interval = setInterval(fetchTracking, 15000);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, [currentRole, currentUserId]);
+    fetchData();
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
+  }, [currentNicNo]);
 
-  if (currentRole !== "FAMILY") return null;
-
-  if (isLoading) {
-    return <div className="p-8 text-center text-gray-500 animate-pulse">Loading tracking information...</div>;
-  }
-
-  if (trackingRecords.length === 0) {
+  if (loading) {
     return (
-      <div className="p-8 text-center text-gray-500 bg-gray-50 rounded-lg border border-gray-100">
-        No active documents found linked to your account.
+      <div className="text-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+        <p className="text-sm text-gray-500">Loading your forms...</p>
       </div>
     );
   }
 
-  const getStageIcon = (stage: string) => {
-    switch (stage) {
-      case "SUBMITTED_BY_GN": return <FileText className="w-5 h-5 text-blue-500" />;
-      case "REVIEW_BY_REGISTRAR": return <Search className="w-5 h-5 text-purple-500" />;
-      case "APPROVED": return <CheckCircle2 className="w-5 h-5 text-green-500" />;
-      case "READY_FOR_PICKUP": return <Package className="w-5 h-5 text-orange-500" />;
-      default: return <FileText className="w-5 h-5 text-gray-400" />;
-    }
-  };
+  if (!currentNicNo) {
+    return (
+      <div className="text-center py-12">
+        <h2 className="text-lg font-medium text-gray-900">Welcome, Family Member</h2>
+        <p className="mt-2 text-sm text-gray-500">
+          Your account does not have a NIC number linked. Please contact support to update your profile.
+        </p>
+      </div>
+    );
+  }
 
-  const getStageTitle = (stage: string) => {
-    switch (stage) {
-      case "SUBMITTED_BY_GN": return "Submitted by GN";
-      case "REVIEW_BY_REGISTRAR": return "Review by Registrar";
-      case "APPROVED": return "Approved";
-      case "READY_FOR_PICKUP": return "Ready for Pickup";
-      default: return stage;
-    }
-  };
-
-  const getStageDescription = (stage: string) => {
-    switch (stage) {
-      case "SUBMITTED_BY_GN": return "The Grama Niladhari has submitted the document to the system.";
-      case "REVIEW_BY_REGISTRAR": return "The Registrar is currently reviewing the document details.";
-      case "APPROVED": return "The application has been finalized and approved.";
-      case "READY_FOR_PICKUP": return "The physical certificate is ready for pickup at the Divisional Secretariat.";
-      default: return "Unknown status";
-    }
-  };
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-sm text-red-600">{error}</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-xl font-semibold text-gray-800 border-b pb-2">Your Document Status</h2>
-      <div className="space-y-4">
-        {trackingRecords.map((record) => (
-          <div key={`${record.formType}-${record.formId}`} className="p-5 bg-white border border-gray-200 shadow-sm rounded-xl">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h3 className="text-lg font-bold text-[#1e3a5f]">{record.formType} Form</h3>
-                <p className="text-sm text-gray-500">Deceased: {record.deceasedName}</p>
-              </div>
-              <div className="text-right text-xs text-gray-400">
-                <p>Submitted: {new Date(record.submittedAt).toLocaleDateString()}</p>
-                <p>Updated: {new Date(record.updatedAt).toLocaleTimeString()}</p>
-              </div>
-            </div>
-
-            {/* Visual Timeline element */}
-            <div className="mt-4 pt-4 border-t border-gray-100 flex items-start gap-4">
-              <div className="mt-1 p-2 bg-gray-50 rounded-full border border-gray-100">
-                {getStageIcon(record.currentStage)}
-              </div>
-              <div>
-                <h4 className="font-semibold text-gray-900">{getStageTitle(record.currentStage)}</h4>
-                <p className="text-sm text-gray-600 mt-1">{getStageDescription(record.currentStage)}</p>
-              </div>
-            </div>
-            
-          </div>
-        ))}
+    <div>
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold text-gray-900">Your Linked Forms</h2>
+        <p className="text-sm text-gray-500 mt-1">
+          Showing forms linked to NIC: <span className="font-mono font-medium text-gray-700">{currentNicNo}</span>
+        </p>
       </div>
+
+      {items.length === 0 ? (
+        <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-200">
+          <p className="text-sm text-gray-500">No forms have been linked to your NIC yet.</p>
+          <p className="text-xs text-gray-400 mt-1">Once a Grama Niladhari submits a B24 report with your NIC, it will appear here.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-gray-200">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="text-left py-3 px-4 font-semibold text-gray-600">Form</th>
+                <th className="text-left py-3 px-4 font-semibold text-gray-600">Deceased / Record</th>
+                <th className="text-left py-3 px-4 font-semibold text-gray-600">Submitted</th>
+                <th className="text-left py-3 px-4 font-semibold text-gray-600">Last Updated</th>
+                <th className="text-left py-3 px-4 font-semibold text-gray-600">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {items.map((item) => (
+                <tr key={`${item.formType}-${item.formId}`} className="hover:bg-gray-50 transition-colors">
+                  <td className="py-3 px-4">
+                    <span className="font-mono font-medium text-gray-800">{item.formType}</span>
+                    <span className="text-gray-400 ml-1">#{item.formId}</span>
+                  </td>
+                  <td className="py-3 px-4 text-gray-700">{item.deceasedName}</td>
+                  <td className="py-3 px-4 text-gray-600 whitespace-nowrap">
+                    {item.submittedAt ? new Date(item.submittedAt).toLocaleString("en-LK", {
+                      year: "numeric", month: "short", day: "numeric",
+                      hour: "2-digit", minute: "2-digit"
+                    }) : "—"}
+                  </td>
+                  <td className="py-3 px-4 text-gray-600 whitespace-nowrap">
+                    {item.updatedAt ? new Date(item.updatedAt).toLocaleString("en-LK", {
+                      year: "numeric", month: "short", day: "numeric",
+                      hour: "2-digit", minute: "2-digit"
+                    }) : "—"}
+                  </td>
+                  <td className="py-3 px-4">
+                    <span className={`inline-block px-2.5 py-1 text-xs font-semibold rounded-full ${stageColors[item.currentStage] || "bg-gray-100 text-gray-700"}`}>
+                      {stageLabels[item.currentStage] || item.currentStage}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

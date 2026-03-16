@@ -1,0 +1,134 @@
+﻿
+> my-project@0.1.0 build
+> next build
+
+Γû▓ Next.js 16.1.6 (Turbopack)
+
+  Creating an optimized production build ...
+node.exe : 
+At line:1 char:1
++ & "C:\Program Files\
+nodejs/node.exe" 
+"C:\Program 
+Files\nodejs/node_mo 
+...
++ ~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
+~~~~~
+    + CategoryInfo    
+          : NotSpeci  
+  fied: (:String) [   
+ ], RemoteExceptio    
+n
+    + FullyQualifiedE 
+   rrorId : NativeCo  
+  mmandError
+ 
+> Build error occurred
+Error: Turbopack 
+build failed with 1 
+errors:
+./app/login/page.tsx:5
+:1
+Module not found: 
+Can't resolve 
+'contexts'
+[0m [90m 3 |[39m 
+[36mimport[39m { 
+useState } 
+[36mfrom[39m [32m"r
+eact"[39m[33m;[39m
+ [90m 4 |[39m 
+[36mimport[39m { 
+useRouter } 
+[36mfrom[39m [32m"n
+ext/navigation"[39m[
+33m;[39m
+[31m[1m>[22m[39m[
+90m 5 |[39m 
+[36mimport[39m { 
+useAuth } 
+[36mfrom[39m [32m"c
+ontexts"[39m[33m;[3
+9m
+ [90m   |[39m [31m
+[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22
+m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[3
+9m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[
+31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22
+m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[3
+9m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[
+31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22
+m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[3
+9m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[
+31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1
+m^[22m[39m
+ [90m 6 |[39m
+ [90m 7 |[39m 
+[36mexport[39m 
+[36mdefault[39m 
+[36mfunction[39m 
+[33mLoginPage[39m() 
+{
+ [90m 8 |[39m   
+[36mconst[39m 
+[email[33m,[39m 
+setEmail] [33m=[39m 
+useState([32m""[39m)
+[33m;[39m[0m
+
+
+
+Import traces:
+  Client Component 
+Browser:
+    
+./app/login/page.tsx 
+[Client Component 
+Browser]
+    
+./app/login/page.tsx 
+[Server Component]
+
+  Client Component 
+SSR:
+    
+./app/login/page.tsx 
+[Client Component SSR]
+    
+./app/login/page.tsx 
+[Server Component]
+
+https://nextjs.org/doc
+s/messages/module-not-
+found
+
+
+    at <unknown> (./ap
+p/login/page.tsx:5:1)
+    at <unknown> (http
+s://nextjs.org/docs/me
+ssages/module-not-foun
+d)

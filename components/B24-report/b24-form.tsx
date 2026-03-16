@@ -1,19 +1,27 @@
 "use client"
 
-import { useState, useCallback } from "react"
-import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
+import { useState, useCallback, useEffect } from "react"
+import { Button } from "../ui/button"
+import { Separator } from "../ui/separator"
 import { B24FormHeader } from "./form-header"
 import { DeathDetailsSection } from "./death-details-section"
 import { CertificationSection } from "./certification-section"
 import { CheckCircle2, AlertCircle } from "lucide-react"
-import { submitB24Form } from "@/lib/api"
+import { submitB24Form, fetchRegistrars } from "../../lib/api"
 
 export function B24Form() {
   const [formData, setFormData] = useState<Record<string, string>>({})
   const [submitted, setSubmitted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [registrars, setRegistrars] = useState<{username: string; fullName: string}[]>([])
+
+  // Fetch registrars on mount for dropdown
+  useEffect(() => {
+    fetchRegistrars()
+      .then(setRegistrars)
+      .catch(() => setRegistrars([]))
+  }, [])
 
   const handleChange = useCallback((name: string, value: string) => {
     setFormData((prev) => ({ ...prev, [name]: value }))
@@ -82,20 +90,45 @@ export function B24Form() {
         </div>
       )}
 
-      <div className="border border-blue-100 bg-blue-50/50 rounded-lg p-5">
+      <div className="border border-blue-100 bg-blue-50/50 rounded-lg p-5 space-y-4">
         <h3 className="text-sm font-semibold text-[#1e3a5f] mb-3">System Tracking Assignment</h3>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">Family Member Account ID (to track status)</label>
-        <input
-          type="number"
-          name="b24FamilyUserId"
-          value={formData.b24FamilyUserId || ""}
-          onChange={(e) => handleChange(e.target.name, e.target.value)}
-          placeholder="e.g., 1 for test family_user"
-          disabled={isSubmitting}
-          className="block w-full max-w-sm rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
-          required
-        />
-        <p className="text-xs text-gray-500 mt-2">Required. Assign this form to a registered family member ID (e.g. 1) to allow them to track its current progress.</p>
+
+        {/* Family Member NIC No */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Family Member NIC No</label>
+          <input
+            type="text"
+            name="b24FamilyNicNo"
+            value={formData.b24FamilyNicNo || ""}
+            onChange={(e) => handleChange(e.target.name, e.target.value)}
+            placeholder="e.g., 200012345678"
+            disabled={isSubmitting}
+            className="block w-full max-w-sm rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+            required
+          />
+          <p className="text-xs text-gray-500 mt-1">Enter the NIC of the registered family member to allow them to track this form.</p>
+        </div>
+
+        {/* Assigned Registrar Dropdown */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Assign to Registrar</label>
+          <select
+            name="assignedRegistrarUsername"
+            value={formData.assignedRegistrarUsername || ""}
+            onChange={(e) => handleChange(e.target.name, e.target.value)}
+            disabled={isSubmitting}
+            className="block w-full max-w-sm rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border bg-white"
+            required
+          >
+            <option value="">-- Select a Registrar --</option>
+            {registrars.map((r) => (
+              <option key={r.username} value={r.username}>
+                {r.fullName} ({r.username})
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-gray-500 mt-1">Choose the Registrar who will receive this form for review.</p>
+        </div>
       </div>
 
       <div className="flex flex-col-reverse sm:flex-row gap-3 pt-4">

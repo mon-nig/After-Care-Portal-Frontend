@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useCallback } from "react"
-import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
+import { Button } from "../ui/button"
+import { Separator } from "../ui/separator"
 import { FormHeader } from "./form-header"
 import { DeathInfoSection } from "./death-info-section"
 import { DeathNatureSection } from "./death-nature-section"
@@ -11,7 +11,7 @@ import { SuddenDeathSection } from "./sudden-death-section"
 import { OfficerSection } from "./officer-section"
 import { DeclarationSection } from "./declaration-section"
 import { CheckCircle2, AlertCircle } from "lucide-react"
-import { submitCr02Form } from "@/lib/api"
+import { submitCr02Form } from "../../lib/api"
 
 export function DeathDeclarationForm() {
   const [formData, setFormData] = useState<Record<string, string>>({})
@@ -103,18 +103,18 @@ export function DeathDeclarationForm() {
 
       <div className="border border-blue-100 bg-blue-50/50 rounded-lg p-5">
         <h3 className="text-sm font-semibold text-[#1e3a5f] mb-3">System Tracking Assignment</h3>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">Family Member Account ID (to track status)</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">Family Member NIC No</label>
         <input
-          type="number"
-          name="cr02FamilyUserId"
-          value={formData.cr02FamilyUserId || ""}
+          type="text"
+          name="cr02FamilyNicNo"
+          value={formData.cr02FamilyNicNo || ""}
           onChange={(e) => handleChange(e.target.name, e.target.value)}
-          placeholder="e.g., 1 for test family_user"
+          placeholder="e.g., 200012345678"
           disabled={isSubmitting}
           className="block w-full max-w-sm rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
           required
         />
-        <p className="text-xs text-gray-500 mt-2">Required. Assign this form to a registered family member ID (e.g. 1) to allow them to track its current progress.</p>
+        <p className="text-xs text-gray-500 mt-2">Enter the NIC of the registered family member to allow them to track this form.</p>
       </div>
 
       <div className="flex flex-col-reverse sm:flex-row gap-3 pt-4">

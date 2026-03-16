@@ -1,0 +1,24 @@
+﻿Γû▓ Next.js 16.1.6 (Turbopack)
+
+  Creating an optimized production build ...
+Γ£ô Compiled successfully in 1660.3ms
+  Skipping validation of types
+  Collecting page data using 21 workers ...
+  Generating static pages using 21 workers (0/6) ...
+  Generating static pages using 21 workers (1/6) 
+  Generating static pages using 21 workers (2/6) 
+  Generating static pages using 21 workers (4/6) 
+Γ£ô Generating static pages using 21 workers (6/6) in 376.7ms
+  Finalizing page optimization ...
+
+Route (app)
+Γöî Γùï /
+Γö£ Γùï /_not-found
+Γö£ ╞Æ /api/login
+Γö£ Γùï /login
+Γöö Γùï /register
+
+
+Γùï  (Static)   prerendered as static content
+╞Æ  (Dynamic)  server-rendered on demand
+

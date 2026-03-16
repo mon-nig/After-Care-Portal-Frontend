@@ -32,19 +32,37 @@ export async function submitCr02Form(data: Record<string, string>) {
   return response.json();
 }
 
-export async function getUnreadNotifications(userId: number, role: string) {
-  const response = await fetch(`${BASE_URL}/notifications/unread?userId=${userId}&role=${role}`);
+export async function getUnreadNotifications(username: string, nicNo: string, role: string) {
+  const params = new URLSearchParams({ role });
+  if (username) params.append("username", username);
+  if (nicNo) params.append("nicNo", nicNo);
+  const response = await fetch(`${BASE_URL}/notifications/unread?${params.toString()}`);
   if (!response.ok) {
     throw new Error(`Failed to fetch notifications: ${response.statusText}`);
   }
   return response.json();
 }
 
-export async function getTrackingInfo(familyUserId: number) {
-  const response = await fetch(`${BASE_URL}/tracking/${familyUserId}`);
+export async function getTrackingInfo(familyNicNo: string) {
+  const response = await fetch(`${BASE_URL}/tracking/nic/${familyNicNo}`);
   if (!response.ok) {
     throw new Error(`Failed to fetch tracking info: ${response.statusText}`);
   }
   return response.json();
 }
 
+export async function fetchRegistrars() {
+  const response = await fetch(`${BASE_URL}/users/registrars`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch registrars: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+export async function fetchB24ById(id: number) {
+  const response = await fetch(`${BASE_URL}/b24/${id}`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch B24 form: ${response.statusText}`);
+  }
+  return response.json();
+}
