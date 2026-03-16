@@ -2,33 +2,42 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth, Role } from "@/contexts/auth-context";
-
-const MOCK_USERS: Record<string, { password: string; role: Role }> = {
-  "gn_user": { password: "password123", role: "GN" },
-  "family_user": { password: "password123", role: "FAMILY" },
-  "doctor_user": { password: "password123", role: "DOCTOR" },
-  "registrar_user": { password: "password123", role: "REGISTRAR" },
-  "police_user": { password: "password123", role: "POLICE" },
-};
+import { useAuth } from "@/contexts/auth-context";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   
-  const { setCurrentRole } = useAuth();
+  const { setCurrentRole, setCurrentUserId } = useAuth();
   const router = useRouter();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const user = MOCK_USERS[username.toLowerCase()];
+    setError("");
+    setIsLoading(true);
 
-    if (user && user.password === password) {
-      setCurrentRole(user.role);
-      router.push("/");
-    } else {
-      setError("Invalid username or password");
+    try {
+      const response = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setCurrentRole(data.role);
+        setCurrentUserId(data.userId);
+        router.push("/");
+      } else {
+        setError(data.message || "Invalid username or password");
+      }
+    } catch (err) {
+      setError("An error occurred during login. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -87,7 +96,8 @@ export default function LoginPage() {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="block w-full rounded-xl border-0 py-3.5 px-4 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-200 bg-gray-50 placeholder:text-gray-400 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-[#4a7c9f] sm:text-sm sm:leading-6 transition-all"
+                disabled={isLoading}
+                className="block w-full rounded-xl border-0 py-3.5 px-4 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-200 bg-gray-50 placeholder:text-gray-400 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-[#4a7c9f] disabled:opacity-50 sm:text-sm sm:leading-6 transition-all"
                 placeholder="Enter your username"
                 required
               />
@@ -99,7 +109,8 @@ export default function LoginPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="block w-full rounded-xl border-0 py-3.5 px-4 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-200 bg-gray-50 placeholder:text-gray-400 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-[#4a7c9f] sm:text-sm sm:leading-6 transition-all"
+                disabled={isLoading}
+                className="block w-full rounded-xl border-0 py-3.5 px-4 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-200 bg-gray-50 placeholder:text-gray-400 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-[#4a7c9f] disabled:opacity-50 sm:text-sm sm:leading-6 transition-all"
                 placeholder="••••••••"
                 required
               />
@@ -107,9 +118,10 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              className="flex w-full justify-center rounded-full bg-[#4a7c9f] px-4 py-3.5 text-sm font-bold text-white shadow-md hover:bg-[#3b6787] hover:shadow-lg transform hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4a7c9f] transition-all duration-200"
+              disabled={isLoading}
+              className="flex w-full justify-center rounded-full bg-[#4a7c9f] px-4 py-3.5 text-sm font-bold text-white shadow-md hover:bg-[#3b6787] hover:shadow-lg transform hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4a7c9f] disabled:opacity-70 disabled:hover:-translate-y-0 disabled:hover:shadow-md transition-all duration-200"
             >
-              Secure Login
+              {isLoading ? "Securely Logging In..." : "Secure Login"}
             </button>
           </form>
 

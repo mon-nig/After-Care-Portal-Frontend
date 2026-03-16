@@ -6,6 +6,8 @@ import { useAuth } from "@/contexts/auth-context";
 import { DeathDeclarationForm } from "@/components/death-declaration-CR02/death-declaration-form";
 import { B24Form } from "@/components/B24-report/b24-form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { NotificationBell } from "@/components/NotificationBell";
+import { FormTracker } from "@/components/FormTracker";
 
 export default function Page() {
   const { currentRole, setCurrentRole } = useAuth();
@@ -44,17 +46,22 @@ export default function Page() {
               Logged in as: <span className="font-semibold text-blue-600">{currentRole}</span>
             </p>
           </div>
-          <button 
-            onClick={handleLogout}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            Log Out
-          </button>
+          <div className="flex items-center gap-4">
+            <NotificationBell />
+            <button 
+              onClick={handleLogout}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              Log Out
+            </button>
+          </div>
         </header>
 
         {/* Content Area */}
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-          {!canViewCR2 && !canViewB24 ? (
+          {currentRole === "FAMILY" ? (
+            <FormTracker />
+          ) : !canViewCR2 && !canViewB24 ? (
             <div className="text-center py-12">
               <h2 className="text-lg font-medium text-gray-900">Welcome to the Portal</h2>
               <p className="mt-2 text-sm text-gray-500">There are no forms assigned to your role at this time.</p>
