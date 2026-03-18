@@ -8,6 +8,7 @@ import { B24Form } from "../components/B24-report/b24-form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { NotificationBell } from "../components/NotificationBell";
 import { FormTracker } from "../components/FormTracker";
+import { CemeteryDashboard } from "../components/CemeteryDashboard";
 
 export default function Page() {
   const { currentRole, setCurrentRole, currentUsername } = useAuth();
@@ -62,7 +63,9 @@ export default function Page() {
 
         {/* Content Area */}
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-          {currentRole === "FAMILY" ? (
+          {currentRole === "CEMETERY" ? (
+            <CemeteryDashboard />
+          ) : currentRole === "FAMILY" ? (
             <FormTracker />
           ) : !canViewCR2 && !canViewB24 ? (
             <div className="text-center py-12">

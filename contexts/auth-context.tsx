@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 
-export type Role = "GUEST" | "FAMILY" | "GN" | "GRAMA_NILADHARI" | "CITIZEN" | "DOCTOR" | "REGISTRAR" | "POLICE";
+export type Role = "GUEST" | "FAMILY" | "GN" | "GRAMA_NILADHARI" | "CITIZEN" | "DOCTOR" | "REGISTRAR" | "POLICE" | "CEMETERY";
 
 interface AuthContextType {
   currentRole: Role;

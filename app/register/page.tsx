@@ -161,6 +161,7 @@ export default function RegisterPage() {
                 <option value="FAMILY">Family Member</option>
                 <option value="GRAMA_NILADHARI">Grama Niladhari</option>
                 <option value="REGISTRAR">Registrar</option>
+                <option value="CEMETERY">Cemetery</option>
               </select>
             </div>
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../contexts/auth-context";
 import { getTrackingInfo } from "../lib/api";
+import Link from "next/link";
 
 interface TrackingItem {
   formId: number;
@@ -107,6 +108,7 @@ export function FormTracker() {
                 <th className="text-left py-3 px-4 font-semibold text-gray-600">Submitted</th>
                 <th className="text-left py-3 px-4 font-semibold text-gray-600">Last Updated</th>
                 <th className="text-left py-3 px-4 font-semibold text-gray-600">Status</th>
+                <th className="text-left py-3 px-4 font-semibold text-gray-600">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -133,6 +135,16 @@ export function FormTracker() {
                     <span className={`inline-block px-2.5 py-1 text-xs font-semibold rounded-full ${stageColors[item.currentStage] || "bg-gray-100 text-gray-700"}`}>
                       {stageLabels[item.currentStage] || item.currentStage}
                     </span>
+                  </td>
+                  <td className="py-3 px-4">
+                    {item.formType === "CR02" && (
+                      <Link
+                        href={`/family/view-cr02/${item.formId}`}
+                        className="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors border border-blue-200 hover:border-blue-300 px-3 py-1.5 rounded-md bg-blue-50"
+                      >
+                        View Form
+                      </Link>
+                    )}
                   </td>
                 </tr>
               ))}
