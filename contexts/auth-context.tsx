@@ -13,6 +13,8 @@ interface AuthContextType {
   setCurrentNicNo: (nicNo: string | null) => void;
   currentUsername: string | null;
   setCurrentUsername: (username: string | null) => void;
+  token: string | null;
+  setToken: (token: string | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -22,6 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentUserId, setCurrentUserIdState] = useState<number | null>(null);
   const [currentNicNo, setCurrentNicNoState] = useState<string | null>(null);
   const [currentUsername, setCurrentUsernameState] = useState<string | null>(null);
+  const [token, setTokenState] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   // Load from localStorage on mount
@@ -30,10 +33,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const savedUserId = localStorage.getItem("currentUserId");
     const savedNicNo = localStorage.getItem("currentNicNo");
     const savedUsername = localStorage.getItem("currentUsername");
+    const savedToken = localStorage.getItem("token");
     if (savedRole) setCurrentRoleState(savedRole);
     if (savedUserId) setCurrentUserIdState(Number(savedUserId));
     if (savedNicNo) setCurrentNicNoState(savedNicNo);
     if (savedUsername) setCurrentUsernameState(savedUsername);
+    if (savedToken) setTokenState(savedToken);
     setLoaded(true);
   }, []);
 
@@ -44,9 +49,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem("currentUserId");
       localStorage.removeItem("currentNicNo");
       localStorage.removeItem("currentUsername");
+      localStorage.removeItem("token");
       setCurrentUserIdState(null);
       setCurrentNicNoState(null);
       setCurrentUsernameState(null);
+      setTokenState(null);
     }
   };
 
@@ -68,6 +75,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     else localStorage.removeItem("currentUsername");
   };
 
+  const setToken = (newToken: string | null) => {
+    setTokenState(newToken);
+    if (newToken) localStorage.setItem("token", newToken);
+    else localStorage.removeItem("token");
+  };
+
   if (!loaded) return null;
 
   return (
@@ -81,6 +94,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setCurrentNicNo,
         currentUsername,
         setCurrentUsername,
+        token,
+        setToken,
       }}
     >
       {children}
