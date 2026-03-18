@@ -8,6 +8,7 @@ import { B24Form } from "../components/B24-report/b24-form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { NotificationBell } from "../components/NotificationBell";
 import { FormTracker } from "../components/FormTracker";
+import { CemeteryDashboard } from "../components/CemeteryDashboard";
 
 import { FamilyDashboard } from "../components/dashboards/FamilyDashboard";
 import { DoctorDashboard } from "../components/dashboards/DoctorDashboard";
@@ -60,7 +61,6 @@ export default function Page() {
 
         {/* Content Area */}
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-          
           {currentRole === "FAMILY" && (
             <Tabs defaultValue="cases" className="w-full">
               <TabsList className="w-full mb-6 flex h-auto gap-1 p-1 bg-gray-100/80">
@@ -98,8 +98,12 @@ export default function Page() {
             </Tabs>
           )}
 
+          {currentRole === "CEMETERY" && (
+            <CemeteryDashboard />
+          )}
+
           {/* Fallback for unknown edge-case roles */}
-          {!["FAMILY", "DOCTOR", "GN", "GRAMA_NILADHARI", "REGISTRAR"].includes(currentRole) && (
+          {!["FAMILY", "DOCTOR", "GN", "GRAMA_NILADHARI", "REGISTRAR", "CEMETERY"].includes(currentRole) && (
             <div className="text-center py-12">
               <h2 className="text-lg font-medium text-gray-900">Welcome to the Portal</h2>
               <p className="mt-2 text-sm text-gray-500">There are no forms assigned to your role at this time.</p>

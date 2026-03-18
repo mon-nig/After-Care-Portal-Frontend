@@ -150,8 +150,21 @@ export default function RegisterPage() {
               />
             </div>
 
-            {/* Role is fixed to FAMILY — GN and Registrar accounts are pre-configured by the system */}
-            <input type="hidden" value={role} />
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Account Role</label>
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                disabled={isLoading}
+                className="block w-full rounded-xl border-0 py-3 px-4 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-[#4a7c9f] disabled:opacity-50 sm:text-sm transition-all"
+              >
+                <option value="FAMILY">Family Member (Citizen)</option>
+                <option value="GRAMA_NILADHARI">Grama Niladhari</option>
+                <option value="DOCTOR">Doctor</option>
+                <option value="REGISTRAR">Registrar</option>
+                <option value="CEMETERY">Cemetery Owner</option>
+              </select>
+            </div>
 
             {/* NIC field shown for all roles */}
             <div>

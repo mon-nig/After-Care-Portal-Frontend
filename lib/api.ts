@@ -59,6 +59,14 @@ export async function fetchRegistrars() {
   return response.json();
 }
 
+export async function fetchCemeteries() {
+  const response = await fetch(`${BASE_URL}/users/cemeteries`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch cemeteries: ${response.statusText}`);
+  }
+  return response.json();
+}
+
 export async function fetchB24ById(id: number) {
   const response = await fetch(`${BASE_URL}/b24/${id}`);
   if (!response.ok) {
@@ -66,6 +74,7 @@ export async function fetchB24ById(id: number) {
   }
   return response.json();
 }
+
 
 // ==========================================
 // DEATH CASE WORKFLOW API CALLS
@@ -133,3 +142,73 @@ export async function issueCr2(caseId: number, token: string | null) {
     method: "POST"
   }, token);
 }
+
+export async function fetchCr02ById(id: number) {
+  const response = await fetch(`${BASE_URL}/cr02/${id}`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch CR02 form: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+export async function submitCemeteryRequest(data: Record<string, any>) {
+  const response = await fetch(`${BASE_URL}/cemetery-requests`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error("Failed to submit cemetery request");
+  return response.json();
+}
+
+export async function fetchFamilyCemeteryRequests(nicNo: string) {
+  const response = await fetch(`${BASE_URL}/cemetery-requests/family/${nicNo}`);
+  if (!response.ok) throw new Error("Failed to fetch family cemetery requests");
+  return response.json();
+}
+
+export async function fetchCemeteryDashboardRequests(username: string) {
+  const response = await fetch(`${BASE_URL}/cemetery-requests/cemetery/${username}`);
+  if (!response.ok) throw new Error("Failed to fetch cemetery dashboard requests");
+  return response.json();
+}
+export async function fetchCemeterySchedules(username: string) {
+  const response = await fetch(`${BASE_URL}/cemetery-schedules/${username}`);
+  if (!response.ok) throw new Error("Failed to fetch schedules");
+  return response.json();
+}
+
+export async function addCemeterySchedule(username: string, timeSlot: string) {
+  const response = await fetch(`${BASE_URL}/cemetery-schedules/${username}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ timeSlot })
+  });
+  if (!response.ok) throw new Error("Failed to add schedule");
+  return response.json();
+}
+
+export async function deleteCemeterySchedule(id: number) {
+  const response = await fetch(`${BASE_URL}/cemetery-schedules/${id}`, {
+    method: "DELETE"
+  });
+  if (!response.ok) throw new Error("Failed to delete schedule");
+}
+
+export async function fetchBookedSlots(username: string, date: string) {
+  const response = await fetch(`${BASE_URL}/cemetery-requests/cemetery/${username}/booked-slots?date=${date}`);
+  if (!response.ok) throw new Error("Failed to fetch booked slots");
+  return response.json();
+}
+export async function updateCemeteryRequestStatus(id: number, status: string) {
+  const url = new URL(`${BASE_URL}/cemetery-requests/${id}/status`);
+  url.searchParams.append("status", status);
+
+  const response = await fetch(url.toString(), {
+    method: "PATCH",
+  });
+  if (!response.ok) throw new Error("Failed to update status");
+  return response.json();
+}
+
+
