@@ -9,15 +9,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs"
 import { NotificationBell } from "../components/NotificationBell";
 import { FormTracker } from "../components/FormTracker";
 
+import { FamilyDashboard } from "../components/dashboards/FamilyDashboard";
+import { DoctorDashboard } from "../components/dashboards/DoctorDashboard";
+import { GNDashboard } from "../components/dashboards/GNDashboard";
+import { RegistrarDashboard } from "../components/dashboards/RegistrarDashboard";
+
 export default function Page() {
   const { currentRole, setCurrentRole, currentUsername } = useAuth();
   const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
-
-  // GN/GRAMA_NILADHARI can ONLY see B24 (no CR02)
-  const canViewB24 = ["GN", "GRAMA_NILADHARI"].includes(currentRole);
-  // REGISTRAR can see CR02 (and uses notifications for B24 review)
-  const canViewCR2 = ["REGISTRAR"].includes(currentRole);
 
   useEffect(() => {
     setIsMounted(true);
@@ -28,8 +28,6 @@ export default function Page() {
 
   if (!isMounted || currentRole === "GUEST") return null;
 
-  const defaultTab = canViewB24 ? "b24" : (canViewCR2 ? "death-declaration" : "");
-
   // Logout function
   const handleLogout = () => {
     setCurrentRole("GUEST");
@@ -38,7 +36,7 @@ export default function Page() {
 
   return (
     <main className="min-h-screen bg-gray-50">
-      <div className="mx-auto max-w-3xl px-4 py-8 sm:py-12">
+      <div className="mx-auto max-w-4xl px-4 py-8 sm:py-12">
         
         {/* Header with Logout Button */}
         <header className="flex items-center justify-between mb-8 pb-4 border-b border-gray-200">
@@ -62,43 +60,53 @@ export default function Page() {
 
         {/* Content Area */}
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-          {currentRole === "FAMILY" ? (
-            <FormTracker />
-          ) : !canViewCR2 && !canViewB24 ? (
+          
+          {currentRole === "FAMILY" && (
+            <Tabs defaultValue="cases" className="w-full">
+              <TabsList className="w-full mb-6 flex h-auto gap-1 p-1 bg-gray-100/80">
+                <TabsTrigger value="cases" className="flex-1">Death Registration Cases</TabsTrigger>
+                <TabsTrigger value="tracker" className="flex-1">Standalone Form Tracker</TabsTrigger>
+              </TabsList>
+              <TabsContent value="cases"><FamilyDashboard /></TabsContent>
+              <TabsContent value="tracker"><FormTracker /></TabsContent>
+            </Tabs>
+          )}
+
+          {currentRole === "DOCTOR" && (
+            <DoctorDashboard />
+          )}
+
+          {(currentRole === "GN" || currentRole === "GRAMA_NILADHARI") && (
+            <Tabs defaultValue="cases" className="w-full">
+              <TabsList className="w-full mb-6 flex h-auto gap-1 p-1 bg-gray-100/80">
+                <TabsTrigger value="cases" className="flex-1">Pending Verifications (B-24 Phase)</TabsTrigger>
+                <TabsTrigger value="standalone" className="flex-1">Create Standalone B-24 Report</TabsTrigger>
+              </TabsList>
+              <TabsContent value="cases"><GNDashboard /></TabsContent>
+              <TabsContent value="standalone"><B24Form /></TabsContent>
+            </Tabs>
+          )}
+
+          {currentRole === "REGISTRAR" && (
+            <Tabs defaultValue="cases" className="w-full">
+              <TabsList className="w-full mb-6 flex flex-wrap h-auto gap-1 p-1 bg-gray-100/80">
+                <TabsTrigger value="cases" className="flex-1">Final Issuance (B-2 Phase)</TabsTrigger>
+                <TabsTrigger value="standalone" className="flex-1">Standalone CR02 Review</TabsTrigger>
+              </TabsList>
+              <TabsContent value="cases"><RegistrarDashboard /></TabsContent>
+              <TabsContent value="standalone"><DeathDeclarationForm /></TabsContent>
+            </Tabs>
+          )}
+
+          {/* Fallback for unknown edge-case roles */}
+          {!["FAMILY", "DOCTOR", "GN", "GRAMA_NILADHARI", "REGISTRAR"].includes(currentRole) && (
             <div className="text-center py-12">
               <h2 className="text-lg font-medium text-gray-900">Welcome to the Portal</h2>
               <p className="mt-2 text-sm text-gray-500">There are no forms assigned to your role at this time.</p>
             </div>
-          ) : (
-            <Tabs defaultValue={defaultTab} className="w-full">
-              <TabsList className="w-full mb-6 flex-wrap h-auto gap-1 p-1">
-                {canViewB24 && (
-                  <TabsTrigger value="b24" className="flex-1 text-xs sm:text-sm">
-                    B24 &mdash; GN Death Report
-                  </TabsTrigger>
-                )}
-                {canViewCR2 && (
-                  <TabsTrigger value="death-declaration" className="flex-1 text-xs sm:text-sm">
-                    CR2 &mdash; Death (Normal/Sudden)
-                  </TabsTrigger>
-                )}
-              </TabsList>
-
-              {canViewB24 && (
-                <TabsContent value="b24">
-                  <B24Form />
-                </TabsContent>
-              )}
-
-              {canViewCR2 && (
-                <TabsContent value="death-declaration">
-                  <DeathDeclarationForm />
-                </TabsContent>
-              )}
-            </Tabs>
           )}
-        </div>
 
+        </div>
       </div>
     </main>
   );

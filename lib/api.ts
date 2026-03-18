@@ -66,3 +66,70 @@ export async function fetchB24ById(id: number) {
   }
   return response.json();
 }
+
+// ==========================================
+// DEATH CASE WORKFLOW API CALLS
+// ==========================================
+const CASES_URL = process.env.NEXT_PUBLIC_API_URL 
+  ? process.env.NEXT_PUBLIC_API_URL.replace('/v1', '/cases') 
+  : "http://localhost:8080/api/cases";
+
+async function authFetch(url: string, options: RequestInit, token: string | null) {
+  const headers = new Headers(options.headers || {});
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  
+  const res = await fetch(url, { ...options, headers });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.message || `API Error: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function createCase(data: any, token: string | null) {
+  return authFetch(CASES_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  }, token);
+}
+
+export async function getMyCases(token: string | null) {
+  return authFetch(CASES_URL, { method: "GET" }, token);
+}
+
+export async function getCaseDetail(caseId: number, token: string | null) {
+  return authFetch(`${CASES_URL}/${caseId}`, { method: "GET" }, token);
+}
+
+export async function issueB12(caseId: number, data: any, token: string | null) {
+  return authFetch(`${CASES_URL}/${caseId}/b12`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  }, token);
+}
+
+export async function issueB24(caseId: number, data: any, token: string | null) {
+  return authFetch(`${CASES_URL}/${caseId}/b24`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  }, token);
+}
+
+export async function submitCr2Family(caseId: number, data: any, token: string | null) {
+  return authFetch(`${CASES_URL}/${caseId}/cr2/family`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cr2FormData: JSON.stringify(data) })
+  }, token);
+}
+
+export async function issueCr2(caseId: number, token: string | null) {
+  return authFetch(`${CASES_URL}/${caseId}/cr2`, {
+    method: "POST"
+  }, token);
+}

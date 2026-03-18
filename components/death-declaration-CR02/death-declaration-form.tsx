@@ -1,10 +1,12 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useMemo, useEffect, useRef } from "react"
 import { Button } from "../ui/button"
 import { Separator } from "../ui/separator"
 import { FormHeader } from "./form-header"
 import { DeathInfoSection } from "./death-info-section"
+import { PersonDepartedSection } from "./person-departed-section"
+import { MaternalDemographicsSection } from "./maternal-demographics-section"
 import { DeathNatureSection } from "./death-nature-section"
 import { InformantSection } from "./informant-section"
 import { SuddenDeathSection } from "./sudden-death-section"
@@ -13,15 +15,42 @@ import { DeclarationSection } from "./declaration-section"
 import { CheckCircle2, AlertCircle } from "lucide-react"
 import { submitCr02Form } from "../../lib/api"
 
-export function DeathDeclarationForm() {
-  const [formData, setFormData] = useState<Record<string, string>>({})
+export interface DeathDeclarationFormProps {
+  initialData?: Record<string, string>;
+  isReviewFlow?: boolean;
+  onReviewSubmit?: (formData: Record<string, string>) => Promise<void>;
+  onCancel?: () => void;
+  mode?: "family" | "registrar";
+}
+
+export function DeathDeclarationForm({ initialData, isReviewFlow, onReviewSubmit, onCancel, mode = "registrar" }: DeathDeclarationFormProps = {}) {
+  const [formData, setFormData] = useState<Record<string, string>>(initialData || {})
   const [submitted, setSubmitted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Track which fields were pre-filled so we can style them
+  const preFilledKeys = useMemo(() => {
+    if (!initialData) return new Set<string>();
+    return new Set(Object.entries(initialData).filter(([, v]) => v && v.trim() !== "").map(([k]) => k));
+  }, [initialData]);
+
   const handleChange = useCallback((name: string, value: string) => {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }, [])
+
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // Apply pre-filled styling to inputs that have initialData values
+  useEffect(() => {
+    if (!formRef.current || preFilledKeys.size === 0) return;
+    const inputs = formRef.current.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("input, textarea, select");
+    inputs.forEach((el) => {
+      if (el.name && preFilledKeys.has(el.name)) {
+        el.classList.add("cr2-prefilled");
+      }
+    });
+  }, [preFilledKeys]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -29,8 +58,12 @@ export function DeathDeclarationForm() {
     setError(null)
     
     try {
-      await submitCr02Form(formData)
-      setSubmitted(true)
+      if (isReviewFlow && onReviewSubmit) {
+        await onReviewSubmit(formData);
+      } else {
+        await submitCr02Form(formData)
+        setSubmitted(true)
+      }
     } catch (err) {
       setError("Failed to connect to the server. Please try again later.")
     } finally {
@@ -43,6 +76,11 @@ export function DeathDeclarationForm() {
     setSubmitted(false)
     setError(null)
   }
+
+  // Determine if maternal demographics should be visible
+  const isFemale = formData.deceasedGender === "female";
+  const ageYears = parseInt(formData.ageYears || "0", 10);
+  const showMaternal = isFemale && ageYears < 49;
 
   if (submitted) {
     return (
@@ -67,10 +105,42 @@ export function DeathDeclarationForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
+    <form
+      ref={formRef}
+      onSubmit={handleSubmit}
+      className="space-y-6 bg-white rounded-xl border border-border/40 shadow-sm p-4 sm:p-8"
+    >
+      {/* Inject styles for pre-filled fields */}
+      <style>{`
+        .cr2-form-prefilled input,
+        .cr2-form-prefilled textarea,
+        .cr2-form-prefilled select {
+          transition: background-color 0.2s ease;
+        }
+        .cr2-prefilled {
+          background-color: #eff6ff !important;
+          border-left: 3px solid #3b82f6 !important;
+        }
+      `}</style>
       <FormHeader />
 
+      {preFilledKeys.size > 0 && (
+        <div className="flex items-center gap-2 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-3 py-2">
+          <span className="inline-block w-3 h-3 rounded-sm bg-blue-100 border-l-2 border-blue-500 shrink-0"></span>
+          Fields with a blue highlight have been auto-filled from previous records.
+        </div>
+      )}
       <DeathInfoSection formData={formData} onChange={handleChange} />
+
+      <Separator />
+      
+      <PersonDepartedSection formData={formData} onChange={handleChange} />
+      
+      <MaternalDemographicsSection 
+        formData={formData} 
+        onChange={handleChange} 
+        visible={showMaternal} 
+      />
 
       <Separator />
 
@@ -88,9 +158,12 @@ export function DeathDeclarationForm() {
 
       <Separator />
 
-      <OfficerSection formData={formData} onChange={handleChange} />
-
-      <Separator />
+      {mode === "registrar" && (
+        <>
+          <OfficerSection formData={formData} onChange={handleChange} />
+          <Separator />
+        </>
+      )}
 
       <DeclarationSection formData={formData} onChange={handleChange} />
 
@@ -101,38 +174,52 @@ export function DeathDeclarationForm() {
         </div>
       )}
 
-      <div className="border border-blue-100 bg-blue-50/50 rounded-lg p-5">
-        <h3 className="text-sm font-semibold text-[#1e3a5f] mb-3">System Tracking Assignment</h3>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">Family Member NIC No</label>
-        <input
-          type="text"
-          name="cr02FamilyNicNo"
-          value={formData.cr02FamilyNicNo || ""}
-          onChange={(e) => handleChange(e.target.name, e.target.value)}
-          placeholder="e.g., 200012345678"
-          disabled={isSubmitting}
-          className="block w-full max-w-sm rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
-          required
-        />
-        <p className="text-xs text-gray-500 mt-2">Enter the NIC of the registered family member to allow them to track this form.</p>
-      </div>
+      {!isReviewFlow && (
+        <div className="border border-blue-100 bg-blue-50/50 rounded-lg p-5">
+          <h3 className="text-sm font-semibold text-[#1e3a5f] mb-3">System Tracking Assignment</h3>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Family Member NIC No</label>
+          <input
+            type="text"
+            name="cr02FamilyNicNo"
+            value={formData.cr02FamilyNicNo || ""}
+            onChange={(e) => handleChange(e.target.name, e.target.value)}
+            placeholder="e.g., 200012345678"
+            disabled={isSubmitting}
+            className="block w-full max-w-sm rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+            required
+          />
+          <p className="text-xs text-gray-500 mt-2">Enter the NIC of the registered family member to allow them to track this form.</p>
+        </div>
+      )}
 
       <div className="flex flex-col-reverse sm:flex-row gap-3 pt-4">
-        <Button 
-          type="button" 
-          variant="outline" 
-          onClick={handleReset} 
-          className="sm:flex-1"
-          disabled={isSubmitting}
-        >
-          Reset Form
-        </Button>
+        {onCancel ? (
+          <Button 
+            type="button" 
+            variant="outline" 
+            onClick={onCancel} 
+            className="sm:flex-1 text-gray-700 font-medium"
+            disabled={isSubmitting}
+          >
+            Cancel Review
+          </Button>
+        ) : (
+          <Button 
+            type="button" 
+            variant="outline" 
+            onClick={handleReset} 
+            className="sm:flex-1"
+            disabled={isSubmitting}
+          >
+            Reset Form
+          </Button>
+        )}
         <Button
           type="submit"
           className="sm:flex-1"
           disabled={formData.declarationConfirmed !== "true" || isSubmitting}
         >
-          {isSubmitting ? "Submitting Declaration..." : "Submit Declaration"}
+          {isSubmitting ? "Submitting Declaration..." : (mode === "family" ? "Submit CR-2 Declaration" : (isReviewFlow ? "Issue Final Certificate (CR-2)" : "Submit Declaration"))}
         </Button>
       </div>
 
