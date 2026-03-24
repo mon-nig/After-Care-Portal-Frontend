@@ -24,7 +24,7 @@ export default function RegisterPage() {
 
     try {
       const payload: Record<string, string> = { username, email, fullName, password, role };
-      if (role === "FAMILY" && nicNo) {
+      if (nicNo) {
         payload.nicNo = nicNo;
       }
 
@@ -150,36 +150,23 @@ export default function RegisterPage() {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Account Role</label>
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                disabled={isLoading}
-                className="block w-full rounded-xl border-0 py-3 px-4 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-[#4a7c9f] disabled:opacity-50 sm:text-sm transition-all"
-              >
-                <option value="FAMILY">Family Member</option>
-                <option value="GRAMA_NILADHARI">Grama Niladhari</option>
-                <option value="REGISTRAR">Registrar</option>
-              </select>
-            </div>
+            {/* Role is fixed to FAMILY — GN and Registrar accounts are pre-configured by the system */}
+            <input type="hidden" value={role} />
 
-            {/* NIC field shown only for FAMILY role */}
-            {role === "FAMILY" && (
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">NIC Number</label>
-                <input
-                  type="text"
-                  value={nicNo}
-                  onChange={(e) => setNicNo(e.target.value)}
-                  disabled={isLoading}
-                  className="block w-full rounded-xl border-0 py-3 px-4 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-200 bg-gray-50 placeholder:text-gray-400 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-[#4a7c9f] disabled:opacity-50 sm:text-sm transition-all"
-                  placeholder="e.g., 200012345678"
-                  required
-                />
-                <p className="text-xs text-gray-500 mt-1">Your NIC is used to link death certificates and track form submissions.</p>
-              </div>
-            )}
+            {/* NIC field shown for all roles */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1.5">NIC Number</label>
+              <input
+                type="text"
+                value={nicNo}
+                onChange={(e) => setNicNo(e.target.value)}
+                disabled={isLoading}
+                className="block w-full rounded-xl border-0 py-3 px-4 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-200 bg-gray-50 placeholder:text-gray-400 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-[#4a7c9f] disabled:opacity-50 sm:text-sm transition-all"
+                placeholder="e.g., 200012345678"
+                required
+              />
+              <p className="text-xs text-gray-500 mt-1">Your NIC is used to link death certificates and track form submissions.</p>
+            </div>
 
             <button
               type="submit"

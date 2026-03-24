@@ -10,7 +10,7 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const { setCurrentRole, setCurrentUserId, setCurrentNicNo, setCurrentUsername } = useAuth();
+  const { setCurrentRole, setCurrentUserId, setCurrentNicNo, setCurrentUsername, setToken } = useAuth();
   const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -33,6 +33,7 @@ export default function LoginPage() {
         setCurrentUserId(data.userId);
         setCurrentNicNo(data.nicNo || null);
         setCurrentUsername(data.username || null);
+        setToken(data.token || null);
         router.push("/");
       } else {
         setError(data.message || "Invalid username or password");

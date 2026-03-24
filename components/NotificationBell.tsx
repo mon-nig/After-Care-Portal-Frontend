@@ -33,8 +33,8 @@ export function NotificationBell() {
           currentRole
         );
         if (mounted) setData(result);
-      } catch (err) {
-        console.error("Failed to fetch notifications", err);
+      } catch {
+        // Silently ignore notification fetch errors — non-critical
       }
     };
 

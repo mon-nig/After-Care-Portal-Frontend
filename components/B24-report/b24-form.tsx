@@ -6,11 +6,19 @@ import { Separator } from "../ui/separator"
 import { B24FormHeader } from "./form-header"
 import { DeathDetailsSection } from "./death-details-section"
 import { CertificationSection } from "./certification-section"
-import { CheckCircle2, AlertCircle } from "lucide-react"
+import { CheckCircle2, AlertCircle, Loader2 } from "lucide-react"
 import { submitB24Form, fetchRegistrars } from "../../lib/api"
+import { useAuth } from "../../contexts/auth-context"
 
-export function B24Form() {
-  const [formData, setFormData] = useState<Record<string, string>>({})
+export interface B24FormProps {
+  initialData?: Record<string, string>;
+  isVerificationFlow?: boolean;
+  onVerificationSubmit?: (formData: Record<string, string>) => Promise<void>;
+  onCancel?: () => void;
+}
+
+export function B24Form({ initialData, isVerificationFlow, onVerificationSubmit, onCancel }: B24FormProps = {}) {
+  const [formData, setFormData] = useState<Record<string, string>>(initialData || {})
   const [submitted, setSubmitted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -33,14 +41,76 @@ export function B24Form() {
     setError(null)
     
     try {
-      await submitB24Form(formData)
-      setSubmitted(true)
+      if (isVerificationFlow && onVerificationSubmit) {
+        // Special case: workflow api logic for pure verification
+        await onVerificationSubmit(formData);
+      } else {
+        // Standard legacy API
+        await submitB24Form(formData)
+        setSubmitted(true)
+      }
     } catch (err) {
       setError("Failed to connect to the server. Please try again later.")
     } finally {
       setIsSubmitting(false)
     }
   }
+
+  // --- AUTO-FILL LOGIC ---
+  const { currentNicNo: placeholderToken } = useAuth(); // just to use the context avoiding warnings later
+  const [isAutoFilling, setIsAutoFilling] = useState(false);
+  const familyNicNo = formData.b24FamilyNicNo;
+
+  useEffect(() => {
+    // Only attempt auto-fill if NIC is likely valid (e.g. 10 or 12 chars)
+    if (!familyNicNo || familyNicNo.length < 10) return;
+
+    const autoFillCase = async () => {
+      setIsAutoFilling(true);
+      setError(null);
+      try {
+        // Fetch active death case for this family NIC
+        const token = localStorage.getItem("token");
+        const headers: HeadersInit = { "Content-Type": "application/json" };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+
+        const CASES_URL = process.env.NEXT_PUBLIC_API_URL 
+          ? process.env.NEXT_PUBLIC_API_URL.replace('/v1', '/cases') 
+          : "http://localhost:8080/api/cases";
+          
+        const response = await fetch(`${CASES_URL}/active/${familyNicNo}`, { headers });
+        if (response.ok) {
+          const caseData = await response.json();
+          console.log("Auto-filling from Case:", caseData);
+          
+          setFormData((prev) => ({
+            ...prev,
+            // Only overwrite if it hasn't been manually typed yet
+            deceasedFullName: prev.deceasedFullName || caseData.deceasedFullName,
+            deceasedNicNo: prev.deceasedNicNo || caseData.deceasedNic,
+            deceasedAddress: prev.deceasedAddress || caseData.address,
+            gender: prev.gender || caseData.gender,
+            dateOfDeath: prev.dateOfDeath || caseData.dateOfDeath,
+            
+            // From Doctor's B12 if it exists
+            causeOfDeath: prev.causeOfDeath || (caseData.formB12 ? caseData.formB12.primaryCause : ""),
+            
+            // From Family applying
+            informantFullName: prev.informantFullName || caseData.applicantFullName,
+            informantNicNo: prev.informantNicNo || caseData.applicantNic,
+          }));
+        }
+      } catch (err) {
+        console.error("Auto-fill failed", err);
+      } finally {
+        setIsAutoFilling(false);
+      }
+    };
+    
+    const timeoutId = setTimeout(autoFillCase, 800); // 800ms debounce
+    return () => clearTimeout(timeoutId);
+  }, [familyNicNo]);
+  // ----------------------
 
   const handleReset = () => {
     setFormData({})
@@ -90,57 +160,75 @@ export function B24Form() {
         </div>
       )}
 
-      <div className="border border-blue-100 bg-blue-50/50 rounded-lg p-5 space-y-4">
-        <h3 className="text-sm font-semibold text-[#1e3a5f] mb-3">System Tracking Assignment</h3>
+      {/* Hide Assignment Section for pure Verification Flow since backend already tracks it */}
+      {!isVerificationFlow && (
+        <div className="border border-blue-100 bg-blue-50/50 rounded-lg p-5 space-y-4">
+          <h3 className="text-sm font-semibold text-[#1e3a5f] mb-3">System Tracking Assignment</h3>
 
-        {/* Family Member NIC No */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Family Member NIC No</label>
-          <input
-            type="text"
-            name="b24FamilyNicNo"
-            value={formData.b24FamilyNicNo || ""}
-            onChange={(e) => handleChange(e.target.name, e.target.value)}
-            placeholder="e.g., 200012345678"
-            disabled={isSubmitting}
-            className="block w-full max-w-sm rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
-            required
-          />
-          <p className="text-xs text-gray-500 mt-1">Enter the NIC of the registered family member to allow them to track this form.</p>
-        </div>
+          {/* Family Member NIC No */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-2">
+              Family Member NIC No
+              {isAutoFilling && <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />}
+            </label>
+            <input
+              type="text"
+              name="b24FamilyNicNo"
+              value={formData.b24FamilyNicNo || ""}
+              onChange={(e) => handleChange(e.target.name, e.target.value)}
+              placeholder="e.g., 200012345678"
+              disabled={isSubmitting}
+              className="block w-full max-w-sm rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">Enter the NIC of the registered family member to allow them to track this form.</p>
+          </div>
 
-        {/* Assigned Registrar Dropdown */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Assign to Registrar</label>
-          <select
-            name="assignedRegistrarUsername"
-            value={formData.assignedRegistrarUsername || ""}
-            onChange={(e) => handleChange(e.target.name, e.target.value)}
-            disabled={isSubmitting}
-            className="block w-full max-w-sm rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border bg-white"
-            required
-          >
-            <option value="">-- Select a Registrar --</option>
-            {registrars.map((r) => (
-              <option key={r.username} value={r.username}>
-                {r.fullName} ({r.username})
-              </option>
-            ))}
-          </select>
-          <p className="text-xs text-gray-500 mt-1">Choose the Registrar who will receive this form for review.</p>
+          {/* Assigned Registrar Dropdown */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Assign to Registrar</label>
+            <select
+              name="assignedRegistrarUsername"
+              value={formData.assignedRegistrarUsername || ""}
+              onChange={(e) => handleChange(e.target.name, e.target.value)}
+              disabled={isSubmitting}
+              className="block w-full max-w-sm rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border bg-white"
+              required
+            >
+              <option value="">-- Select a Registrar --</option>
+              {registrars.map((r) => (
+                <option key={r.username} value={r.username}>
+                  {r.fullName} ({r.username})
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">Choose the Registrar who will receive this form for review.</p>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="flex flex-col-reverse sm:flex-row gap-3 pt-4">
-        <Button 
-          type="button" 
-          variant="outline" 
-          onClick={handleReset} 
-          className="sm:flex-1"
-          disabled={isSubmitting}
-        >
-          Reset Form
-        </Button>
+        {onCancel ? (
+          <Button 
+            type="button" 
+            variant="outline" 
+            onClick={onCancel} 
+            className="sm:flex-1 text-gray-700 font-medium"
+            disabled={isSubmitting}
+          >
+            Cancel Review
+          </Button>
+        ) : (
+          <Button 
+            type="button" 
+            variant="outline" 
+            onClick={handleReset} 
+            className="sm:flex-1"
+            disabled={isSubmitting}
+          >
+            Reset Form
+          </Button>
+        )}
         <Button
           type="submit"
           className="sm:flex-1"

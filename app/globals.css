@@ -123,3 +123,26 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ── Global: Visually distinguish filled fields from empty ones ── */
+input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="hidden"]):not(:placeholder-shown),
+textarea:not(:placeholder-shown),
+select:has(option:checked:not([value=""])) {
+  background-color: #eff6ff !important;
+  border-left: 3px solid #3b82f6 !important;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+/* Date, time, and number inputs that have a value */
+input[type="date"]:not([value=""]),
+input[type="time"]:not([value=""]),
+input[type="number"]:valid:not(:placeholder-shown) {
+  background-color: #eff6ff !important;
+  border-left: 3px solid #3b82f6 !important;
+}
+
+/* Plain HTML inputs (e.g. FamilyDashboard) that have content */
+input.border:not(:placeholder-shown) {
+  background-color: #eff6ff !important;
+  border-left: 3px solid #3b82f6 !important;
+}
