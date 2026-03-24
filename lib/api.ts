@@ -133,3 +133,51 @@ export async function issueCr2(caseId: number, token: string | null) {
     method: "POST"
   }, token);
 }
+
+// ==========================================
+// CEMETERY WORKFLOW API CALLS
+// ==========================================
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL 
+  ? process.env.NEXT_PUBLIC_API_URL.replace('/v1', '') 
+  : "http://localhost:8080/api";
+
+export async function getCemeteries(token: string | null) {
+  return authFetch(`${API_BASE_URL}/cemeteries`, { method: "GET" }, token);
+}
+
+export async function getCemeterySchedule(cemeteryId: number, token: string | null) {
+  return authFetch(`${API_BASE_URL}/cemeteries/${cemeteryId}/schedule`, { method: "GET" }, token);
+}
+
+export async function createBooking(cemeteryId: number, data: any, token: string | null) {
+  return authFetch(`${API_BASE_URL}/cemeteries/${cemeteryId}/bookings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  }, token);
+}
+
+export async function getOwnerBookings(token: string | null) {
+  return authFetch(`${API_BASE_URL}/cemetery-owner/bookings`, { method: "GET" }, token);
+}
+
+export async function getOwnerSchedules(token: string | null) {
+  return authFetch(`${API_BASE_URL}/cemetery-owner/schedule`, { method: "GET" }, token);
+}
+
+export async function addOwnerSchedule(data: any, token: string | null) {
+  return authFetch(`${API_BASE_URL}/cemetery-owner/schedule`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  }, token);
+}
+
+export async function updateBookingStatus(bookingId: number, status: string, token: string | null) {
+  return authFetch(`${API_BASE_URL}/cemetery-owner/bookings/${bookingId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status })
+  }, token);
+}

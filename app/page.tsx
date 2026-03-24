@@ -13,6 +13,7 @@ import { FamilyDashboard } from "../components/dashboards/FamilyDashboard";
 import { DoctorDashboard } from "../components/dashboards/DoctorDashboard";
 import { GNDashboard } from "../components/dashboards/GNDashboard";
 import { RegistrarDashboard } from "../components/dashboards/RegistrarDashboard";
+import { CemeteryDashboard } from "../components/dashboards/CemeteryDashboard";
 
 export default function Page() {
   const { currentRole, setCurrentRole, currentUsername } = useAuth();
@@ -98,8 +99,12 @@ export default function Page() {
             </Tabs>
           )}
 
+          {currentRole === "CEMETERY" && (
+            <CemeteryDashboard />
+          )}
+
           {/* Fallback for unknown edge-case roles */}
-          {!["FAMILY", "DOCTOR", "GN", "GRAMA_NILADHARI", "REGISTRAR"].includes(currentRole) && (
+          {!["FAMILY", "DOCTOR", "GN", "GRAMA_NILADHARI", "REGISTRAR", "CEMETERY"].includes(currentRole) && (
             <div className="text-center py-12">
               <h2 className="text-lg font-medium text-gray-900">Welcome to the Portal</h2>
               <p className="mt-2 text-sm text-gray-500">There are no forms assigned to your role at this time.</p>

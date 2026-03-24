@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../../contexts/auth-context";
 import { createCase, getMyCases, getCaseDetail, submitCr2Family } from "../../lib/api";
 import { DeathDeclarationForm } from "../death-declaration-CR02/death-declaration-form";
+import { CemeteryBookingModal } from "./CemeteryBookingModal";
 
 export function FamilyDashboard() {
   const { token } = useAuth();
@@ -9,6 +10,7 @@ export function FamilyDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [bookingCaseProps, setBookingCaseProps] = useState<{id: number, name: string} | null>(null);
 
   // CR-2 Form state
   const [cr2CaseId, setCr2CaseId] = useState<number | null>(null);
@@ -268,15 +270,42 @@ export function FamilyDashboard() {
           )}
           
           {c.status === "CR2_ISSUED_CLOSED" && c.formCr2 && (
-            <div className="mt-4 p-4 border border-green-200 bg-green-50 rounded-md text-green-800">
-              <p className="font-bold flex items-center gap-2">
-                ✅ Final Death Certificate (CR-2) Issued!
-              </p>
-              <p className="text-sm mt-1">Serial Number: <span className="font-mono bg-white px-2 py-0.5 rounded border border-green-300">{c.formCr2.certificateSerialNumber}</span></p>
+            <div className="mt-4 p-4 border border-green-200 bg-green-50 rounded-md text-green-800 space-y-3">
+              <div>
+                <p className="font-bold flex items-center gap-2 text-lg">
+                  ✅ Final Death Certificate (CR-2) Issued!
+                </p>
+                <p className="text-sm mt-1">Serial Number: <span className="font-mono bg-white px-2 py-0.5 rounded border border-green-300">{c.formCr2.certificateSerialNumber}</span></p>
+              </div>
+              
+              <div className="flex flex-wrap gap-3 pt-2 border-t border-green-200">
+                <button 
+                  onClick={() => alert(`Downloading CR-2 Form for ${c.deceasedFullName} (Serial: ${c.formCr2.certificateSerialNumber})...\n\nThis form is your prerequisite for Cemetery bookings.`)}
+                  className="bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-700 shadow-sm"
+                >
+                  Download CR02 Form
+                </button>
+                <button 
+                  onClick={() => setBookingCaseProps({ id: c.caseId, name: c.deceasedFullName })}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 shadow-sm flex items-center gap-1"
+                >
+                  Book Cemetery
+                </button>
+              </div>
             </div>
           )}
         </div>
       ))}
+
+      {/* Cemetery Booking Modal */}
+      {bookingCaseProps && (
+        <CemeteryBookingModal 
+          token={token} 
+          caseId={bookingCaseProps.id} 
+          deceasedName={bookingCaseProps.name} 
+          onClose={() => setBookingCaseProps(null)} 
+        />
+      )}
     </div>
   );
 }
