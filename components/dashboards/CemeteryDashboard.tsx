@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
-import { getOwnerBookings, getOwnerSchedules, addOwnerSchedule, updateBookingStatus } from "../../lib/api";
+import { getOwnerBookings, getOwnerSchedules, addOwnerSchedule, updateBookingStatus, deleteOwnerSchedule } from "../../lib/api";
 import { useAuth } from "../../contexts/auth-context";
 
 export function CemeteryDashboard() {
@@ -47,6 +47,16 @@ export function CemeteryDashboard() {
       fetchData();
     } catch (err) {
       alert("Failed to update status");
+    }
+  };
+
+  const handleDeleteSchedule = async (id: number) => {
+    if (!confirm("Are you sure you want to delete this schedule block?")) return;
+    try {
+      await deleteOwnerSchedule(id, token);
+      fetchData();
+    } catch (err) {
+      alert("Failed to delete schedule");
     }
   };
 
@@ -109,9 +119,12 @@ export function CemeteryDashboard() {
             </form>
 
             <h4 className="font-semibold mb-2">Common Daily Schedule Blocks</h4>
-            <ul className="list-disc pl-5">
+            <ul className="space-y-2 max-w-sm">
               {schedules.map((s, idx) => (
-                <li key={s.id || idx}>{s.startTime} - {s.endTime}</li>
+                <li key={s.id || idx} className="flex justify-between items-center bg-gray-50 border p-3 rounded shadow-sm">
+                  <span>{s.startTime} - {s.endTime}</span>
+                  <button onClick={() => handleDeleteSchedule(s.id)} className="text-red-600 hover:text-red-800 font-medium text-sm">Delete</button>
+                </li>
               ))}
             </ul>
           </div>

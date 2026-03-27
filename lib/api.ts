@@ -185,3 +185,9 @@ export async function updateBookingStatus(bookingId: number, status: string, tok
     body: JSON.stringify({ status })
   }, token);
 }
+
+export async function deleteOwnerSchedule(id: number, token: string | null) {
+  return authFetch(`${API_BASE_URL}/cemetery-owner/schedule/${id}`, {
+    method: "DELETE"
+  }, token);
+}
