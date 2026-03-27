@@ -16,6 +16,7 @@ export function FamilyDashboard() {
   const [cr2CaseId, setCr2CaseId] = useState<number | null>(null);
   const [cr2CaseDetails, setCr2CaseDetails] = useState<any>(null);
   const [cr2Loading, setCr2Loading] = useState(false);
+  const [isViewMode, setIsViewMode] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -64,12 +65,13 @@ export function FamilyDashboard() {
     }
   };
 
-  const handleOpenCr2Form = async (caseId: number) => {
+  const handleOpenCr2Form = async (caseId: number, isView: boolean = false) => {
     setCr2Loading(true);
     try {
       const details = await getCaseDetail(caseId, token);
       setCr2CaseId(caseId);
       setCr2CaseDetails(details);
+      setIsViewMode(isView);
     } catch (err: any) {
       alert("Error loading case details: " + err.message);
     } finally {
@@ -112,18 +114,20 @@ export function FamilyDashboard() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold text-gray-800">
-            Fill CR-2 Declaration — Case #{cr2CaseId}
+            {isViewMode ? `View Finalized CR-2 Declaration — Case #${cr2CaseId}` : `Fill CR-2 Declaration — Case #${cr2CaseId}`}
           </h2>
           <button
-            onClick={() => { setCr2CaseId(null); setCr2CaseDetails(null); }}
+            onClick={() => { setCr2CaseId(null); setCr2CaseDetails(null); setIsViewMode(false); }}
             className="text-sm text-gray-500 hover:text-gray-700 underline"
           >
             ← Back to Cases
           </button>
         </div>
-        <p className="text-sm text-gray-600 bg-blue-50 border border-blue-200 p-3 rounded">
-          Please fill out all sections of the Death Declaration form below. The <strong>Officer Section</strong> will be filled by the Registrar after you submit.
-        </p>
+        {!isViewMode && (
+          <p className="text-sm text-gray-600 bg-blue-50 border border-blue-200 p-3 rounded">
+            Please fill out all sections of the Death Declaration form below. The <strong>Officer Section</strong> will be filled by the Registrar after you submit.
+          </p>
+        )}
         <DeathDeclarationForm
           mode="family"
           isReviewFlow={true}
@@ -156,9 +160,20 @@ export function FamilyDashboard() {
             informantSignatureName: cr2CaseDetails.applicantName || "",
             informantSignatureAddress: cr2CaseDetails.address || "",
           }}
+          isReadOnly={isViewMode}
           onReviewSubmit={handleCr2Submit}
-          onCancel={() => { setCr2CaseId(null); setCr2CaseDetails(null); }}
+          onCancel={() => { setCr2CaseId(null); setCr2CaseDetails(null); setIsViewMode(false); }}
+          onBookCemetery={isViewMode ? () => setBookingCaseProps({ id: cr2CaseId!, name: cr2CaseDetails.deceasedFullName }) : undefined}
         />
+        {/* Render Cemetery Booking Modal inside the View mode too */}
+        {bookingCaseProps && (
+          <CemeteryBookingModal 
+            token={token} 
+            caseId={bookingCaseProps.id} 
+            deceasedName={bookingCaseProps.name} 
+            onClose={() => setBookingCaseProps(null)} 
+          />
+        )}
       </div>
     );
   }
@@ -269,27 +284,22 @@ export function FamilyDashboard() {
             </div>
           )}
           
-          {c.status === "CR2_ISSUED_CLOSED" && c.formCr2 && (
+          {c.status === "CR2_ISSUED_CLOSED" && (
             <div className="mt-4 p-4 border border-green-200 bg-green-50 rounded-md text-green-800 space-y-3">
               <div>
                 <p className="font-bold flex items-center gap-2 text-lg">
                   ✅ Final Death Certificate (CR-2) Issued!
                 </p>
-                <p className="text-sm mt-1">Serial Number: <span className="font-mono bg-white px-2 py-0.5 rounded border border-green-300">{c.formCr2.certificateSerialNumber}</span></p>
+                <p className="text-sm mt-1">Status: <span className="font-mono bg-white px-2 py-0.5 rounded border border-green-300">COMPLETED & VERIFIED</span></p>
               </div>
               
               <div className="flex flex-wrap gap-3 pt-2 border-t border-green-200">
                 <button 
-                  onClick={() => alert(`Downloading CR-2 Form for ${c.deceasedFullName} (Serial: ${c.formCr2.certificateSerialNumber})...\n\nThis form is your prerequisite for Cemetery bookings.`)}
+                  onClick={() => handleOpenCr2Form(c.caseId, true)}
+                  disabled={cr2Loading}
                   className="bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-700 shadow-sm"
                 >
-                  Download CR02 Form
-                </button>
-                <button 
-                  onClick={() => setBookingCaseProps({ id: c.caseId, name: c.deceasedFullName })}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 shadow-sm flex items-center gap-1"
-                >
-                  Book Cemetery
+                  {cr2Loading ? "Loading Form..." : "Download CR02 Form"}
                 </button>
               </div>
             </div>

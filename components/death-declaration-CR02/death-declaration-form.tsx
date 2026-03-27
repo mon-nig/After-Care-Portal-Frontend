@@ -21,9 +21,11 @@ export interface DeathDeclarationFormProps {
   onReviewSubmit?: (formData: Record<string, string>) => Promise<void>;
   onCancel?: () => void;
   mode?: "family" | "registrar";
+  isReadOnly?: boolean;
+  onBookCemetery?: () => void;
 }
 
-export function DeathDeclarationForm({ initialData, isReviewFlow, onReviewSubmit, onCancel, mode = "registrar" }: DeathDeclarationFormProps = {}) {
+export function DeathDeclarationForm({ initialData, isReviewFlow, onReviewSubmit, onCancel, mode = "registrar", isReadOnly, onBookCemetery }: DeathDeclarationFormProps = {}) {
   const [formData, setFormData] = useState<Record<string, string>>(initialData || {})
   const [submitted, setSubmitted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -110,7 +112,8 @@ export function DeathDeclarationForm({ initialData, isReviewFlow, onReviewSubmit
       onSubmit={handleSubmit}
       className="space-y-6 bg-white rounded-xl border border-border/40 shadow-sm p-4 sm:p-8"
     >
-      {/* Inject styles for pre-filled fields */}
+      <fieldset disabled={isReadOnly} className="contents">
+        {/* Inject styles for pre-filled fields */}
       <style>{`
         .cr2-form-prefilled input,
         .cr2-form-prefilled textarea,
@@ -192,35 +195,61 @@ export function DeathDeclarationForm({ initialData, isReviewFlow, onReviewSubmit
         </div>
       )}
 
+      </fieldset>
+
       <div className="flex flex-col-reverse sm:flex-row gap-3 pt-4">
-        {onCancel ? (
-          <Button 
-            type="button" 
-            variant="outline" 
-            onClick={onCancel} 
-            className="sm:flex-1 text-gray-700 font-medium"
-            disabled={isSubmitting}
-          >
-            Cancel Review
-          </Button>
+        {isReadOnly ? (
+          <>
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={onCancel} 
+              className="sm:flex-1 text-gray-700 font-medium"
+            >
+              Close Form
+            </Button>
+            {onBookCemetery && (
+              <Button
+                type="button"
+                onClick={onBookCemetery}
+                className="sm:flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Book Cemetery
+              </Button>
+            )}
+          </>
         ) : (
-          <Button 
-            type="button" 
-            variant="outline" 
-            onClick={handleReset} 
-            className="sm:flex-1"
-            disabled={isSubmitting}
-          >
-            Reset Form
-          </Button>
+          <>
+            {onCancel ? (
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={onCancel} 
+                className="sm:flex-1 text-gray-700 font-medium"
+                disabled={isSubmitting}
+              >
+                Cancel Review
+              </Button>
+            ) : (
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={handleReset} 
+                className="sm:flex-1"
+                disabled={isSubmitting}
+              >
+                Reset Form
+              </Button>
+            )}
+            <Button
+              type="submit"
+              className="sm:flex-1"
+              disabled={formData.declarationConfirmed !== "true" || isSubmitting}
+            >
+              {isSubmitting ? "Submitting Declaration..." : (mode === "family" ? "Submit CR-2 Declaration" : (isReviewFlow ? "Issue Final Certificate (CR-2)" : "Submit Declaration"))}
+            </Button>
+          </>
         )}
-        <Button
-          type="submit"
-          className="sm:flex-1"
-          disabled={formData.declarationConfirmed !== "true" || isSubmitting}
-        >
-          {isSubmitting ? "Submitting Declaration..." : (mode === "family" ? "Submit CR-2 Declaration" : (isReviewFlow ? "Issue Final Certificate (CR-2)" : "Submit Declaration"))}
-        </Button>
       </div>
 
       <p className="text-center text-xs text-muted-foreground pb-4">

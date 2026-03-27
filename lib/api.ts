@@ -150,6 +150,10 @@ export async function getCemeterySchedule(cemeteryId: number, token: string | nu
   return authFetch(`${API_BASE_URL}/cemeteries/${cemeteryId}/schedule`, { method: "GET" }, token);
 }
 
+export async function getBookedTimes(cemeteryId: number, date: string, token: string | null) {
+  return authFetch(`${API_BASE_URL}/cemeteries/${cemeteryId}/booked-times?date=${date}`, { method: "GET" }, token);
+}
+
 export async function createBooking(cemeteryId: number, data: any, token: string | null) {
   return authFetch(`${API_BASE_URL}/cemeteries/${cemeteryId}/bookings`, {
     method: "POST",

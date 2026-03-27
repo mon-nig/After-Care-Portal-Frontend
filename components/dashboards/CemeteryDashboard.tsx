@@ -10,7 +10,7 @@ export function CemeteryDashboard() {
   const [bookings, setBookings] = useState<any[]>([]);
   const [schedules, setSchedules] = useState<any[]>([]);
   
-  const [newSchedule, setNewSchedule] = useState({ date: "", startTime: "", endTime: "" });
+  const [newSchedule, setNewSchedule] = useState({ startTime: "", endTime: "" });
 
   const fetchData = async () => {
     try {
@@ -33,7 +33,7 @@ export function CemeteryDashboard() {
     try {
       await addOwnerSchedule(newSchedule, token);
       alert("Schedule added");
-      setNewSchedule({ date: "", startTime: "", endTime: "" });
+      setNewSchedule({ startTime: "", endTime: "" });
       fetchData();
     } catch (err) {
       alert("Failed to add schedule");
@@ -93,11 +93,6 @@ export function CemeteryDashboard() {
             <h3 className="text-lg font-medium text-gray-900 mb-4">Master Schedule Management</h3>
             
             <form onSubmit={handleCreateSchedule} className="mb-6 space-y-4 max-w-sm">
-              <div>
-                <label className="block text-sm font-medium">Date</label>
-                <input type="date" className="border p-2 w-full rounded" required
-                  value={newSchedule.date} onChange={e => setNewSchedule({...newSchedule, date: e.target.value})} />
-              </div>
               <div className="flex gap-4">
                 <div className="flex-1">
                   <label className="block text-sm font-medium">Start Time</label>
@@ -110,13 +105,13 @@ export function CemeteryDashboard() {
                     value={newSchedule.endTime} onChange={e => setNewSchedule({...newSchedule, endTime: e.target.value})} />
                 </div>
               </div>
-              <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded">Add Schedule Block</button>
+              <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded">Add Daily Schedule Block</button>
             </form>
 
-            <h4 className="font-semibold mb-2">Current Blocks</h4>
+            <h4 className="font-semibold mb-2">Common Daily Schedule Blocks</h4>
             <ul className="list-disc pl-5">
-              {schedules.map(s => (
-                <li key={s.id}>{s.date} : {s.startTime} - {s.endTime}</li>
+              {schedules.map((s, idx) => (
+                <li key={s.id || idx}>{s.startTime} - {s.endTime}</li>
               ))}
             </ul>
           </div>
