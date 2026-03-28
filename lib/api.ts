@@ -162,6 +162,10 @@ export async function createBooking(cemeteryId: number, data: any, token: string
   }, token);
 }
 
+export async function getCaseCemeteryBooking(caseId: number, token: string | null) {
+  return authFetch(`${API_BASE_URL}/cases/${caseId}/cemetery-booking`, { method: "GET" }, token);
+}
+
 export async function getOwnerBookings(token: string | null) {
   return authFetch(`${API_BASE_URL}/cemetery-owner/bookings`, { method: "GET" }, token);
 }

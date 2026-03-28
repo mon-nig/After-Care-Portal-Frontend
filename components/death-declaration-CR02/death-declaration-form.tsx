@@ -23,9 +23,17 @@ export interface DeathDeclarationFormProps {
   mode?: "family" | "registrar";
   isReadOnly?: boolean;
   onBookCemetery?: () => void;
+  cemeteryBooking?: {
+    status: string;
+    cemeteryName: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+  } | null;
+  isLoadingBooking?: boolean;
 }
 
-export function DeathDeclarationForm({ initialData, isReviewFlow, onReviewSubmit, onCancel, mode = "registrar", isReadOnly, onBookCemetery }: DeathDeclarationFormProps = {}) {
+export function DeathDeclarationForm({ initialData, isReviewFlow, onReviewSubmit, onCancel, mode = "registrar", isReadOnly, onBookCemetery, cemeteryBooking, isLoadingBooking }: DeathDeclarationFormProps = {}) {
   const [formData, setFormData] = useState<Record<string, string>>(initialData || {})
   const [submitted, setSubmitted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -208,13 +216,27 @@ export function DeathDeclarationForm({ initialData, isReviewFlow, onReviewSubmit
             >
               Close Form
             </Button>
-            {onBookCemetery && (
+            {onBookCemetery && isLoadingBooking && (
+               <div className="sm:flex-1 text-sm text-gray-500 flex items-center justify-center p-2 border border-transparent">Loading booking status...</div>
+            )}
+            {onBookCemetery && !isLoadingBooking && cemeteryBooking?.status === 'PENDING' && (
+              <div className="sm:flex-1 bg-yellow-50 text-yellow-800 p-2 text-sm text-center border border-yellow-200 rounded-md font-medium">
+                Booking request submitted. Awaiting cemetery owner approval.
+              </div>
+            )}
+            {onBookCemetery && !isLoadingBooking && cemeteryBooking?.status === 'APPROVED' && (
+              <div className="sm:flex-1 bg-green-50 text-green-800 p-2 text-sm text-center border border-green-200 rounded-md">
+                <strong>Booking Confirmed:</strong> {cemeteryBooking.cemeteryName} <br/>
+                {cemeteryBooking.date} • {cemeteryBooking.startTime} - {cemeteryBooking.endTime}
+              </div>
+            )}
+            {onBookCemetery && !isLoadingBooking && (!cemeteryBooking || cemeteryBooking.status === 'REJECTED') && (
               <Button
                 type="button"
                 onClick={onBookCemetery}
                 className="sm:flex-1 bg-blue-600 hover:bg-blue-700 text-white"
               >
-                Book Cemetery
+                {cemeteryBooking?.status === 'REJECTED' ? "Booking Rejected - Book Again" : "Book Cemetery"}
               </Button>
             )}
           </>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../../contexts/auth-context";
-import { createCase, getMyCases, getCaseDetail, submitCr2Family } from "../../lib/api";
+import { createCase, getMyCases, getCaseDetail, submitCr2Family, getCaseCemeteryBooking } from "../../lib/api";
 import { DeathDeclarationForm } from "../death-declaration-CR02/death-declaration-form";
 import { CemeteryBookingModal } from "./CemeteryBookingModal";
 
@@ -17,6 +17,9 @@ export function FamilyDashboard() {
   const [cr2CaseDetails, setCr2CaseDetails] = useState<any>(null);
   const [cr2Loading, setCr2Loading] = useState(false);
   const [isViewMode, setIsViewMode] = useState(false);
+
+  const [cemeteryBooking, setCemeteryBooking] = useState<any>(null);
+  const [isLoadingBooking, setIsLoadingBooking] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -44,6 +47,26 @@ export function FamilyDashboard() {
   useEffect(() => {
     if (token) fetchCases();
   }, [token]);
+
+  const fetchBookingStatus = async (caseId: number) => {
+    setIsLoadingBooking(true);
+    try {
+      const booking = await getCaseCemeteryBooking(caseId, token);
+      setCemeteryBooking(booking);
+    } catch (err: any) {
+      setCemeteryBooking(null);
+    } finally {
+      setIsLoadingBooking(false);
+    }
+  };
+
+  useEffect(() => {
+    if (cr2CaseId && isViewMode && token) {
+      fetchBookingStatus(cr2CaseId);
+    } else {
+      setCemeteryBooking(null);
+    }
+  }, [cr2CaseId, isViewMode, token]);
 
   const handleCreateCase = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -164,6 +187,8 @@ export function FamilyDashboard() {
           onReviewSubmit={handleCr2Submit}
           onCancel={() => { setCr2CaseId(null); setCr2CaseDetails(null); setIsViewMode(false); }}
           onBookCemetery={isViewMode ? () => setBookingCaseProps({ id: cr2CaseId!, name: cr2CaseDetails.deceasedFullName }) : undefined}
+          cemeteryBooking={cemeteryBooking}
+          isLoadingBooking={isLoadingBooking}
         />
         {/* Render Cemetery Booking Modal inside the View mode too */}
         {bookingCaseProps && (
@@ -171,7 +196,10 @@ export function FamilyDashboard() {
             token={token} 
             caseId={bookingCaseProps.id} 
             deceasedName={bookingCaseProps.name} 
-            onClose={() => setBookingCaseProps(null)} 
+            onClose={() => {
+              if (bookingCaseProps) fetchBookingStatus(bookingCaseProps.id);
+              setBookingCaseProps(null);
+            }} 
           />
         )}
       </div>
@@ -313,7 +341,10 @@ export function FamilyDashboard() {
           token={token} 
           caseId={bookingCaseProps.id} 
           deceasedName={bookingCaseProps.name} 
-          onClose={() => setBookingCaseProps(null)} 
+          onClose={() => {
+            if (bookingCaseProps) fetchBookingStatus(bookingCaseProps.id);
+            setBookingCaseProps(null);
+          }} 
         />
       )}
     </div>
