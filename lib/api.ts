@@ -142,8 +142,8 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL
   ? process.env.NEXT_PUBLIC_API_URL.replace('/v1', '') 
   : "http://localhost:8080/api";
 
-export async function getCemeteries(token: string | null) {
-  return authFetch(`${API_BASE_URL}/cemeteries`, { method: "GET" }, token);
+export async function getCemeteries(caseId: number, token: string | null) {
+  return authFetch(`${API_BASE_URL}/cemeteries?caseId=${caseId}`, { method: "GET" }, token);
 }
 
 export async function getCemeterySchedule(cemeteryId: number, token: string | null) {

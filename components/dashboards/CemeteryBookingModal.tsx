@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { getCemeteries, getCemeterySchedule, getBookedTimes, createBooking } from "../../lib/api";
+import { useToast } from "../ui/use-toast";
 
 interface CemeteryBookingModalProps {
   token: string | null;
@@ -11,11 +12,12 @@ interface CemeteryBookingModalProps {
 }
 
 export function CemeteryBookingModal({ token, caseId, deceasedName, onClose }: CemeteryBookingModalProps) {
+  const { toast } = useToast();
   const [cemeteries, setCemeteries] = useState<any[]>([]);
   const [selectedCemetery, setSelectedCemetery] = useState<any>(null);
   const [schedules, setSchedules] = useState<any[]>([]);
   const [bookedTimes, setBookedTimes] = useState<any[]>([]);
-  
+
   const [bookingData, setBookingData] = useState({
     date: "",
     startTime: "",
@@ -26,14 +28,14 @@ export function CemeteryBookingModal({ token, caseId, deceasedName, onClose }: C
   useEffect(() => {
     async function fetchCems() {
       try {
-        const data = await getCemeteries(token);
+        const data = await getCemeteries(caseId, token);
         setCemeteries(data);
       } catch (err) {
         console.error(err);
       }
     }
     fetchCems();
-  }, [token]);
+  }, [caseId, token]);
 
   const handleSelectCemetery = async (cemId: number) => {
     setSelectedCemetery(cemId);
@@ -46,7 +48,7 @@ export function CemeteryBookingModal({ token, caseId, deceasedName, onClose }: C
   };
 
   const handleDateChange = async (date: string) => {
-    setBookingData({...bookingData, date, startTime: "", endTime: ""});
+    setBookingData({ ...bookingData, date, startTime: "", endTime: "" });
     if (!date || !selectedCemetery) return;
     try {
       const data = await getBookedTimes(selectedCemetery, date, token);
@@ -66,7 +68,11 @@ export function CemeteryBookingModal({ token, caseId, deceasedName, onClose }: C
   const handleBook = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCemetery || !bookingData.startTime || !bookingData.endTime) {
-      alert("Please specify a valid time slot from the schedule.");
+      toast({
+        title: "Missing Information",
+        description: "Please specify a valid time slot from the schedule.",
+        variant: "destructive",
+      });
       return;
     }
     try {
@@ -77,10 +83,17 @@ export function CemeteryBookingModal({ token, caseId, deceasedName, onClose }: C
         endTime: bookingData.endTime,
         notes: bookingData.notes
       }, token);
-      alert("Booking request submitted successfully!");
+      toast({
+        title: "Success",
+        description: "Booking request submitted successfully!",
+      });
       onClose();
     } catch (err) {
-      alert("Failed to submit booking");
+      toast({
+        title: "Error",
+        description: "Failed to submit booking",
+        variant: "destructive",
+      });
     }
   };
 
@@ -93,16 +106,16 @@ export function CemeteryBookingModal({ token, caseId, deceasedName, onClose }: C
             <button onClick={onClose} className="text-gray-500 hover:text-gray-700 font-bold p-2 text-xl">&times;</button>
           </div>
         </div>
-        
+
         <div className="p-6 space-y-6">
           {!selectedCemetery ? (
             <div>
               <h3 className="text-lg font-medium mb-4">1. Select a Cemetery</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {cemeteries.map(c => (
-                  <div key={c.id} 
-                       className="border p-4 rounded-lg cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition"
-                       onClick={() => handleSelectCemetery(c.id)}>
+                  <div key={c.id}
+                    className="border p-4 rounded-lg cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition"
+                    onClick={() => handleSelectCemetery(c.id)}>
                     <h4 className="font-bold">{c.name}</h4>
                     <p className="text-sm text-gray-600">Tel: {c.phone}</p>
                     <p className="text-sm text-gray-600">{c.email}</p>
@@ -113,13 +126,13 @@ export function CemeteryBookingModal({ token, caseId, deceasedName, onClose }: C
             </div>
           ) : (
             <div>
-              <button 
+              <button
                 onClick={() => { setSelectedCemetery(null); setBookingData({ date: "", startTime: "", endTime: "", notes: "" }); }}
                 className="text-sm text-gray-500 hover:text-gray-700 underline mb-4 inline-block"
               >
                 &larr; Back to Cemetery List
               </button>
-              
+
               <h3 className="text-lg font-medium mb-4">2. Select Date & Slot</h3>
               <form onSubmit={handleBook} className="space-y-4">
                 <div>
@@ -140,10 +153,10 @@ export function CemeteryBookingModal({ token, caseId, deceasedName, onClose }: C
                             key={s.id}
                             type="button"
                             disabled={booked}
-                            onClick={() => setBookingData({...bookingData, startTime: s.startTime, endTime: s.endTime})}
+                            onClick={() => setBookingData({ ...bookingData, startTime: s.startTime, endTime: s.endTime })}
                             className={`p-2 border rounded text-sm text-center transition ${booked ? "bg-gray-100 text-gray-400 line-through cursor-not-allowed" : selected ? "bg-blue-600 text-white border-blue-600" : "hover:border-blue-500 hover:bg-blue-50 bg-white"}`}
                           >
-                            {s.startTime.substring(0,5)} - {s.endTime.substring(0,5)}
+                            {s.startTime.substring(0, 5)} - {s.endTime.substring(0, 5)}
                             {booked && <span className="block text-xs mt-1 text-red-500 font-semibold uppercase">Already Booked</span>}
                           </button>
                         );
@@ -158,9 +171,9 @@ export function CemeteryBookingModal({ token, caseId, deceasedName, onClose }: C
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Additional Notes</label>
                   <textarea className="border p-2 w-full rounded focus:ring focus:ring-blue-200" rows={3}
-                    value={bookingData.notes} onChange={e => setBookingData({...bookingData, notes: e.target.value})} placeholder="Any special requests or details for the cemetery..."></textarea>
+                    value={bookingData.notes} onChange={e => setBookingData({ ...bookingData, notes: e.target.value })} placeholder="Any special requests or details for the cemetery..."></textarea>
                 </div>
-                
+
                 <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-md font-medium hover:bg-blue-700 w-full py-3 disabled:opacity-50 transition" disabled={!bookingData.startTime || !bookingData.endTime}>
                   Submit Booking Request
                 </button>
