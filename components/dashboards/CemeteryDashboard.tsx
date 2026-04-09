@@ -4,9 +4,11 @@ import React, { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { getOwnerBookings, getOwnerSchedules, addOwnerSchedule, updateBookingStatus, deleteOwnerSchedule } from "../../lib/api";
 import { useAuth } from "../../contexts/auth-context";
+import { useToast } from "../ui/use-toast";
 
 export function CemeteryDashboard() {
   const { token } = useAuth();
+  const { toast } = useToast();
   const [bookings, setBookings] = useState<any[]>([]);
   const [schedules, setSchedules] = useState<any[]>([]);
   
@@ -32,21 +34,35 @@ export function CemeteryDashboard() {
     e.preventDefault();
     try {
       await addOwnerSchedule(newSchedule, token);
-      alert("Schedule added");
+      toast({
+        title: "Success",
+        description: "Schedule added successfully.",
+      });
       setNewSchedule({ startTime: "", endTime: "" });
       fetchData();
     } catch (err) {
-      alert("Failed to add schedule");
+      toast({
+        title: "Error",
+        description: "Failed to add schedule",
+        variant: "destructive",
+      });
     }
   };
 
   const handleUpdateStatus = async (id: number, status: string) => {
     try {
       await updateBookingStatus(id, status, token);
-      alert("Status updated");
+      toast({
+        title: "Success",
+        description: "Status updated successfully.",
+      });
       fetchData();
     } catch (err) {
-      alert("Failed to update status");
+      toast({
+        title: "Error",
+        description: "Failed to update status",
+        variant: "destructive",
+      });
     }
   };
 
@@ -54,9 +70,17 @@ export function CemeteryDashboard() {
     if (!confirm("Are you sure you want to delete this schedule block?")) return;
     try {
       await deleteOwnerSchedule(id, token);
+      toast({
+        title: "Success",
+        description: "Schedule deleted successfully.",
+      });
       fetchData();
     } catch (err) {
-      alert("Failed to delete schedule");
+      toast({
+        title: "Error",
+        description: "Failed to delete schedule",
+        variant: "destructive",
+      });
     }
   };
 

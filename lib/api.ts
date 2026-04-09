@@ -120,11 +120,19 @@ export async function issueB24(caseId: number, data: any, token: string | null) 
   }, token);
 }
 
-export async function submitCr2Family(caseId: number, data: any, token: string | null) {
-  return authFetch(`${CASES_URL}/${caseId}/cr2/family`, {
+export async function assignDoctor(caseId: number, doctorId: number, token: string | null) {
+  return authFetch(`${CASES_URL}/${caseId}/assign-doctor`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ doctorId })
+  }, token);
+}
+
+export async function gnAction(caseId: number, action: "APPROVE" | "REQUEST_MEDICAL", token: string | null) {
+  return authFetch(`${CASES_URL}/${caseId}/gn-action`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ cr2FormData: JSON.stringify(data) })
+    body: JSON.stringify({ action })
   }, token);
 }
 
