@@ -5,7 +5,7 @@ import { getMyCases, issueB12 } from "../../lib/api";
 import { useToast } from "../../hooks/use-toast";
 
 export function DoctorDashboard() {
-  const { token } = useAuth();
+  const { token, currentDoctorId } = useAuth();
   const { toast } = useToast();
   const [cases, setCases] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,6 +60,26 @@ export function DoctorDashboard() {
 
   return (
     <div className="space-y-6">
+      {/* ── Doctor ID Banner ── */}
+      <div className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 flex flex-col sm:flex-row sm:items-center gap-3 shadow-sm">
+        <div className="flex items-center gap-3 flex-1">
+          <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center shrink-0">
+            <span className="text-white text-lg font-bold">⚕</span>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-blue-500 uppercase tracking-wider">Your Doctor ID</p>
+            {currentDoctorId ? (
+              <p className="text-xl font-mono font-bold text-blue-900 tracking-widest">{currentDoctorId}</p>
+            ) : (
+              <p className="text-sm text-blue-400 italic">No Doctor ID assigned — please contact the administrator.</p>
+            )}
+          </div>
+        </div>
+        <div className="text-xs text-blue-600 bg-blue-100 rounded-lg px-3 py-2 max-w-xs">
+          Share this ID with family members so they can route medical confirmation cases directly to you.
+        </div>
+      </div>
+
       <div>
         <h2 className="text-xl font-bold text-gray-800">Pending Medical Certifications (B-12)</h2>
         <p className="text-sm text-gray-500 mt-1">Cases assigned to you requiring medical certification.</p>

@@ -13,6 +13,8 @@ interface AuthContextType {
   setCurrentNicNo: (nicNo: string | null) => void;
   currentUsername: string | null;
   setCurrentUsername: (username: string | null) => void;
+  currentDoctorId: string | null;
+  setCurrentDoctorId: (doctorId: string | null) => void;
   token: string | null;
   setToken: (token: string | null) => void;
 }
@@ -24,6 +26,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentUserId, setCurrentUserIdState] = useState<number | null>(null);
   const [currentNicNo, setCurrentNicNoState] = useState<string | null>(null);
   const [currentUsername, setCurrentUsernameState] = useState<string | null>(null);
+  const [currentDoctorId, setCurrentDoctorIdState] = useState<string | null>(null);
   const [token, setTokenState] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -33,11 +36,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const savedUserId = localStorage.getItem("currentUserId");
     const savedNicNo = localStorage.getItem("currentNicNo");
     const savedUsername = localStorage.getItem("currentUsername");
+    const savedDoctorId = localStorage.getItem("currentDoctorId");
     const savedToken = localStorage.getItem("token");
     if (savedRole) setCurrentRoleState(savedRole);
     if (savedUserId) setCurrentUserIdState(Number(savedUserId));
     if (savedNicNo) setCurrentNicNoState(savedNicNo);
     if (savedUsername) setCurrentUsernameState(savedUsername);
+    if (savedDoctorId) setCurrentDoctorIdState(savedDoctorId);
     if (savedToken) setTokenState(savedToken);
     setLoaded(true);
   }, []);
@@ -49,10 +54,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem("currentUserId");
       localStorage.removeItem("currentNicNo");
       localStorage.removeItem("currentUsername");
+      localStorage.removeItem("currentDoctorId");
       localStorage.removeItem("token");
       setCurrentUserIdState(null);
       setCurrentNicNoState(null);
       setCurrentUsernameState(null);
+      setCurrentDoctorIdState(null);
       setTokenState(null);
     }
   };
@@ -67,6 +74,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setCurrentNicNoState(nicNo);
     if (nicNo) localStorage.setItem("currentNicNo", nicNo);
     else localStorage.removeItem("currentNicNo");
+  };
+
+  const setCurrentDoctorId = (doctorId: string | null) => {
+    setCurrentDoctorIdState(doctorId);
+    if (doctorId) localStorage.setItem("currentDoctorId", doctorId);
+    else localStorage.removeItem("currentDoctorId");
   };
 
   const setCurrentUsername = (username: string | null) => {
@@ -94,6 +107,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setCurrentNicNo,
         currentUsername,
         setCurrentUsername,
+        currentDoctorId,
+        setCurrentDoctorId,
         token,
         setToken,
       }}

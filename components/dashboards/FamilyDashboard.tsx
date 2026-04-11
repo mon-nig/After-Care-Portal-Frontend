@@ -125,14 +125,14 @@ export function FamilyDashboard() {
 
   // ── Assign Doctor Fallback ──
   const handleAssignDoctor = async (caseId: number) => {
-    const doctorId = Number(doctorIdInputs[caseId]);
+    const doctorId = doctorIdInputs[caseId]?.trim();
     if (!doctorId) {
-      toast({ title: "Validation Error", description: "Please enter a valid Doctor ID.", variant: "destructive" });
+      toast({ title: "Validation Error", description: "Please enter a Doctor ID (e.g. DOC-A1B2C3).", variant: "destructive" });
       return;
     }
     setAssigningDoctor(caseId);
     try {
-      await assignDoctor(caseId, doctorId, token);
+      await assignDoctor(caseId, doctorId as any, token);
       toast({ title: "Doctor Assigned", description: "The doctor has been assigned. The case is now pending medical review.", variant: "default" });
       fetchCases();
     } catch (err: any) {
@@ -347,7 +347,7 @@ export function FamilyDashboard() {
             <p className="text-xs text-gray-500 mb-3">If the GN requests a medical confirmation, this doctor will be automatically notified. You can also provide one later if required.</p>
             <div>
               <label className="block text-sm font-medium text-gray-700">Doctor ID</label>
-              <input type="number" value={basicData.doctorId} onChange={e => setBasicData({...basicData, doctorId: e.target.value})} className="mt-1 block w-full md:w-1/2 rounded-md border-gray-300 shadow-sm p-2 border" placeholder="Enter Doctor's system ID" />
+              <input type="text" value={basicData.doctorId} onChange={e => setBasicData({...basicData, doctorId: e.target.value})} className="mt-1 block w-full md:w-1/2 rounded-md border-gray-300 shadow-sm p-2 border" placeholder="e.g. DOC-A1B2C3" />
             </div>
           </div>
 
@@ -395,11 +395,11 @@ export function FamilyDashboard() {
               </p>
               <div className="flex gap-2 items-center">
                 <input
-                  type="number"
-                  placeholder="Doctor ID"
+                  type="text"
+                  placeholder="e.g. DOC-A1B2C3"
                   value={doctorIdInputs[c.caseId] || ""}
                   onChange={e => setDoctorIdInputs(prev => ({ ...prev, [c.caseId]: e.target.value }))}
-                  className="block rounded-md border border-amber-300 shadow-sm p-2 text-sm w-40 focus:ring-amber-500 focus:border-amber-500"
+                  className="block rounded-md border border-amber-300 shadow-sm p-2 text-sm w-44 font-mono focus:ring-amber-500 focus:border-amber-500"
                 />
                 <button
                   onClick={() => handleAssignDoctor(c.caseId)}
