@@ -80,8 +80,10 @@ export function GNDashboard() {
                   <p className="text-sm text-gray-500">NIC: {c.deceasedNic} • Reported By: {c.applicantFullName || "N/A"} • Case #{c.caseId}</p>
 
                   {c.causeOfDeath && (
-                    <div className="mt-2 inline-flex items-center gap-2 bg-green-50 border border-green-200 text-green-800 text-xs font-medium px-3 py-1.5 rounded">
-                      <span className="font-semibold">Medical Finding:</span> {c.causeOfDeath}
+                    <div className="mt-2 bg-green-50 border border-green-200 text-green-800 text-sm px-4 py-2 flex flex-col rounded-md shadow-sm">
+                      <span className="font-semibold text-green-900 border-b border-green-200 pb-1 mb-1">Medical Findings</span>
+                      <span className="mb-0.5"><strong>Cause:</strong> {c.causeOfDeath} (ICD-10: {c.b12Icd10Code || "N/A"})</span>
+                      <span className="text-xs"><strong>Certified By:</strong> {c.b12DoctorName || "Assigned Doctor"} <span className="font-mono text-green-700">({c.b12DoctorId || "N/A"})</span></span>
                     </div>
                   )}
 

@@ -97,7 +97,7 @@ export function DoctorDashboard() {
             <div key={c.caseId} className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm flex flex-col sm:flex-row justify-between sm:items-center">
               <div>
                 <h3 className="text-lg font-bold text-gray-900">{c.deceasedFullName}</h3>
-                <p className="text-sm text-gray-500">NIC: {c.deceasedNic} • DOD: {c.dateOfDeath} • Case #{c.caseId}</p>
+                <p className="text-sm text-gray-500">NIC: {c.deceasedNic} • Case #{c.caseId}</p>
               </div>
               <button
                 onClick={() => setActiveCase(c)}
@@ -110,11 +110,19 @@ export function DoctorDashboard() {
         </div>
       ) : (
         <div className="bg-white border border-gray-200 rounded-lg shadow-md overflow-hidden">
-          <div className="bg-blue-50 border-b border-blue-100 p-4">
-            <h3 className="font-bold text-blue-900">Issuing Medical Certificate (B-12)</h3>
-            <p className="text-sm text-blue-700 mt-1">
-              For deceased: <span className="font-semibold">{activeCase.deceasedFullName}</span> (NIC: {activeCase.deceasedNic}) • Case #{activeCase.caseId}
-            </p>
+          <div className="bg-blue-50 p-4 border-b border-blue-100">
+            <h3 className="font-bold text-blue-900 mb-3">Issuing Medical Certificate (B-12)</h3>
+            <div className="bg-white rounded-md border border-blue-200 p-3 flex flex-col md:flex-row md:items-center justify-between gap-2 shadow-sm">
+              <div>
+                <p className="text-xs uppercase tracking-wider text-gray-500 font-semibold mb-0.5">Deceased Name</p>
+                <p className="text-base font-bold text-gray-800">{activeCase.deceasedFullName}</p>
+              </div>
+              <div className="md:text-right">
+                <p className="text-xs uppercase tracking-wider text-gray-500 font-semibold mb-0.5">Deceased NIC / ID</p>
+                <p className="text-base font-mono font-medium text-gray-700">{activeCase.deceasedNic || "N/A"}</p>
+              </div>
+            </div>
+            <p className="text-xs text-blue-500 mt-2 font-medium">Case #{activeCase.caseId}</p>
           </div>
 
           <form onSubmit={handleSubmitB12} className="p-5 space-y-4">

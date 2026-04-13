@@ -103,7 +103,7 @@ export function FamilyDashboard() {
     try {
       const payload = {
         ...basicData,
-        doctorId: basicData.doctorId ? Number(basicData.doctorId) : null,
+        doctorId: basicData.doctorId.trim() || null,
         // Merge basic info-relevant fields into cr2FormData to help Registrar
         cr2FormData: JSON.stringify({
           ...cr2Fields,
@@ -415,7 +415,7 @@ export function FamilyDashboard() {
           {/* ── Status: Pending B-12 Medical ── */}
           {c.status === "PENDING_B12_MEDICAL" && (
             <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
-              Awaiting Medical Certification (B-12) from the assigned doctor. You will be notified once completed.
+              Awaiting medical confirmation from the assigned doctor.
             </div>
           )}
 
