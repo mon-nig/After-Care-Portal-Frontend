@@ -1,8 +1,16 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useAuth } from "../../contexts/auth-context";
-import { getMyCases, gnAction } from "../../lib/api";
+import { getMyCases, gnAction, getCaseDetail } from "../../lib/api";
 import { useToast } from "../../hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "../ui/dialog";
+import { B24Form } from "../B24-report/b24-form";
 
 export function GNDashboard() {
   const { token } = useAuth();
@@ -10,6 +18,12 @@ export function GNDashboard() {
   const [cases, setCases] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
+
+  // ── B-24 Modal state ──
+  const [isB24ModalOpen, setIsB24ModalOpen] = useState(false);
+  const [selectedCase, setSelectedCase] = useState<any | null>(null);
+  const [b24InitialData, setB24InitialData] = useState<Record<string, string>>({});
+  const [b24Loading, setB24Loading] = useState(false);
 
   const fetchCases = async () => {
     try {
@@ -43,6 +57,76 @@ export function GNDashboard() {
     }
   };
 
+  // ── Open B-24 modal: fetch full case detail and pre-fill the form ──
+  const handleOpenB24 = async (caseListItem: any) => {
+    setSelectedCase(caseListItem);
+    setB24Loading(true);
+    setIsB24ModalOpen(true);
+
+    try {
+      const detail = await getCaseDetail(caseListItem.caseId, token);
+
+      // Parse dateOfDeath into year/month/day for the B24 form fields
+      let deathYear = "";
+      let deathMonth = "";
+      let deathDay = "";
+      if (detail.dateOfDeath) {
+        const parts = String(detail.dateOfDeath).split("-");
+        if (parts.length === 3) {
+          deathYear = parts[0];
+          deathMonth = String(parseInt(parts[1], 10)); // remove leading zero
+          deathDay = String(parseInt(parts[2], 10));
+        }
+      }
+
+      // Map case data → B24 form field names
+      const prefilled: Record<string, string> = {
+        // Death details (Section 1)
+        b24DeathYear: deathYear,
+        b24DeathMonth: deathMonth,
+        b24DeathDay: deathDay,
+
+        // Full name (Section 2)
+        b24FullName: detail.deceasedFullName || "",
+
+        // Sex (Section 3) — map MALE/FEMALE to lowercase for RadioGroup
+        b24Sex: detail.gender ? detail.gender.toLowerCase() : "",
+
+        // Cause of Death (Section 6) — from B12 if available
+        b24CauseOfDeath: detail.formB12?.primaryCause || caseListItem.causeOfDeath || "",
+
+        // Informant / person bound to give info (Section 7)
+        b24InformantName: detail.applicantName || "",
+      };
+
+      setB24InitialData(prefilled);
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to load case details for B-24 form.", variant: "destructive" });
+      setIsB24ModalOpen(false);
+    } finally {
+      setB24Loading(false);
+    }
+  };
+
+  // ── Submit B-24 form & forward to Registrar ──
+  const handleB24Submit = async (formData: Record<string, string>) => {
+    if (!selectedCase) return;
+
+    // 1. Call the existing GN Approve endpoint to forward to Registrar
+    await gnAction(selectedCase.caseId, "APPROVE", token);
+
+    toast({
+      title: "B-24 Submitted",
+      description: `Case #${selectedCase.caseId}: B-24 form saved and forwarded to Registrar.`,
+      variant: "default",
+    });
+
+    setIsB24ModalOpen(false);
+    setSelectedCase(null);
+    setB24InitialData({});
+    fetchCases();
+  };
+
   if (loading) return <div className="p-4 text-center">Loading pending GN cases...</div>;
 
   return (
@@ -50,7 +134,7 @@ export function GNDashboard() {
       <div>
         <h2 className="text-xl font-bold text-gray-800">GN Case Review</h2>
         <p className="text-sm text-gray-500 mt-1">
-          Cases awaiting your decision. Approve to forward directly to the Registrar, or request medical confirmation from a doctor.
+          Cases awaiting your decision. Fill out the B-24 form to forward to the Registrar, or request medical confirmation from a doctor.
         </p>
       </div>
 
@@ -97,11 +181,11 @@ export function GNDashboard() {
                 {/* Action Buttons */}
                 <div className="flex flex-col sm:flex-row gap-2 shrink-0">
                   <button
-                    onClick={() => handleAction(c.caseId, "APPROVE")}
+                    onClick={() => handleOpenB24(c)}
                     disabled={isLoading}
                     className="bg-green-600 text-white px-4 py-2.5 rounded-md text-sm font-medium hover:bg-green-700 transition disabled:opacity-50 whitespace-nowrap"
                   >
-                    {isLoading ? "Processing..." : "✓ Approve → Registrar"}
+                    {isLoading ? "Processing..." : "📋 B-24"}
                   </button>
                   {!hasB12 && (
                     <button
@@ -118,6 +202,47 @@ export function GNDashboard() {
           );
         })}
       </div>
+
+      {/* ── B-24 Form Modal ── */}
+      <Dialog open={isB24ModalOpen} onOpenChange={(open) => {
+        if (!open) {
+          setIsB24ModalOpen(false);
+          setSelectedCase(null);
+          setB24InitialData({});
+        }
+      }}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>B-24 — Report of Death by Grama Seva Niladhari</DialogTitle>
+            <DialogDescription>
+              {selectedCase
+                ? `Case #${selectedCase.caseId} — ${selectedCase.deceasedFullName} (NIC: ${selectedCase.deceasedNic})`
+                : "Loading case details..."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {b24Loading ? (
+            <div className="flex items-center justify-center py-16 text-gray-500">
+              <svg className="animate-spin h-6 w-6 mr-3 text-green-600" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Loading B-24 form...
+            </div>
+          ) : (
+            <B24Form
+              initialData={b24InitialData}
+              isVerificationFlow={true}
+              onVerificationSubmit={handleB24Submit}
+              onCancel={() => {
+                setIsB24ModalOpen(false);
+                setSelectedCase(null);
+                setB24InitialData({});
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
