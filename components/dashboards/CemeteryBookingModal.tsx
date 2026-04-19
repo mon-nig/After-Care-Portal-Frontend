@@ -88,10 +88,10 @@ export function CemeteryBookingModal({ token, caseId, deceasedName, onClose }: C
         description: "Booking request submitted successfully!",
       });
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       toast({
         title: "Error",
-        description: "Failed to submit booking",
+        description: err?.message || "Failed to submit booking",
         variant: "destructive",
       });
     }

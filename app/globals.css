@@ -116,10 +116,15 @@
 }
 
 @layer base {
+  html {
+    min-height: 100%;
+    background-color: #f8fafc;
+  }
   * {
     @apply border-border outline-ring/50;
   }
   body {
+    min-height: 100dvh;
     @apply bg-background text-foreground;
   }
 }
