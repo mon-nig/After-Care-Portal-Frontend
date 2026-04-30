@@ -113,10 +113,12 @@ export function FamilyCemeteryBookingPage() {
       return;
     }
 
+    const caseId = selectedCaseId;
+
     async function loadCemeteries() {
       try {
         setCemeteriesLoading(true);
-        const data = await getCemeteries(selectedCaseId, token);
+        const data = await getCemeteries(caseId, token);
         setCemeteries(data);
       } catch (err: any) {
         toast({

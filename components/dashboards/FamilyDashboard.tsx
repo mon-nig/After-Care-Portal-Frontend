@@ -3,27 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../contexts/auth-context";
-import { createCase, getMyCases, getCaseDetail, assignDoctor } from "../../lib/api";
+import { assignDoctor, createCase, getCaseDetail, getMyCases, type CaseDetailResponse, type CaseListItem } from "../../lib/api";
+import { canonicalFamilyReportSchema, computeAgeAtDeath, createInitialFamilyReport, type CanonicalFamilyReport } from "../../lib/death-report-schema";
+import { caseDetailToPrefill } from "../../lib/mappers/caseDetailToPrefill";
 import { DeathDeclarationForm } from "../death-declaration-CR02/death-declaration-form";
 import { useToast } from "../../hooks/use-toast";
-
-const INITIAL_CR2_FIELDS = {
-  typeOfDeath: "normal",
-  timeOfDeath: "",
-  deathLocation: "",
-  district: "",
-  dsDivision: "",
-  regDivision: "",
-  placeInEnglish: "",
-  placeInSinhalaOrTamil: "",
-  causeEstablished: "",
-  causeOfDeath: "",
-  icdCode: "",
-  burialPlace: "",
-  informantCapacity: "relative",
-  informantPhone: "",
-  informantEmail: "",
-};
 
 function buildCr02FileName(deceasedName: string | undefined, caseId: number) {
   const safeName = (deceasedName || `case-${caseId}`)
@@ -41,48 +25,48 @@ function getStatusTone(status: string) {
   return "bg-blue-100 text-blue-800 border-blue-200";
 }
 
+function numberOrNull(value: string) {
+  return value.trim() === "" ? null : Number(value);
+}
+
 export function FamilyDashboard() {
   const { token } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
-  const [cases, setCases] = useState<any[]>([]);
+  const [cases, setCases] = useState<CaseListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [familyReport, setFamilyReport] = useState<CanonicalFamilyReport>(createInitialFamilyReport());
+  const [submittingCase, setSubmittingCase] = useState(false);
 
   const [cr2CaseId, setCr2CaseId] = useState<number | null>(null);
-  const [cr2CaseDetails, setCr2CaseDetails] = useState<any>(null);
+  const [cr2CaseDetails, setCr2CaseDetails] = useState<CaseDetailResponse | null>(null);
   const [cr2LoadingCaseId, setCr2LoadingCaseId] = useState<number | null>(null);
-  const [isViewMode, setIsViewMode] = useState(false);
 
   const [doctorIdInputs, setDoctorIdInputs] = useState<Record<number, string>>({});
   const [assigningDoctor, setAssigningDoctor] = useState<number | null>(null);
 
-  const [basicData, setBasicData] = useState({
-    deceasedFullName: "",
-    deceasedNic: "",
-    dateOfBirth: "",
-    dateOfDeath: "",
-    gender: "MALE",
-    sectorCode: "KANDY-01",
-    address: "",
-    doctorId: "",
-  });
-  const [cr2Fields, setCr2Fields] = useState({ ...INITIAL_CR2_FIELDS });
-  const [submittingCase, setSubmittingCase] = useState(false);
-
   const completedCases = useMemo(
     () => cases.filter((caseItem) => caseItem.status === "CR2_ISSUED_CLOSED"),
-    [cases]
+    [cases],
   );
   const pendingCases = useMemo(
     () => cases.filter((caseItem) => !["CR2_ISSUED_CLOSED", "REJECTED_UNNATURAL_DEATH"].includes(caseItem.status)),
-    [cases]
+    [cases],
   );
   const doctorActionCases = useMemo(
     () => cases.filter((caseItem) => caseItem.status === "PENDING_DOCTOR_ASSIGNMENT"),
-    [cases]
+    [cases],
   );
+
+  const derivedAge =
+    computeAgeAtDeath(familyReport.deceased.dateOfBirth, familyReport.death.date) ?? {
+      years: familyReport.deceased.ageYears ?? 0,
+      months: familyReport.deceased.ageMonths ?? 0,
+      days: familyReport.deceased.ageDays ?? 0,
+    };
+  const showMaternal = familyReport.deceased.gender === "FEMALE" && derivedAge.years < 49;
 
   const fetchCases = async () => {
     try {
@@ -106,35 +90,60 @@ export function FamilyDashboard() {
     e.preventDefault();
     setSubmittingCase(true);
 
-    try {
-      const payload = {
-        ...basicData,
-        doctorId: basicData.doctorId.trim() || null,
-        cr2FormData: JSON.stringify({
-          ...cr2Fields,
-          placeInEnglish: cr2Fields.placeInEnglish || basicData.address,
-        }),
-      };
+    const parsed = canonicalFamilyReportSchema.safeParse({
+      ...familyReport,
+      doctorId: familyReport.doctorId?.trim() || null,
+      deceased: {
+        ...familyReport.deceased,
+        nic: familyReport.deceased.nic?.trim() || null,
+        passportCountry: familyReport.deceased.passportCountry?.trim() || null,
+        passportNumber: familyReport.deceased.passportNumber?.trim() || null,
+        fullNameOfficialLanguage: familyReport.deceased.fullNameOfficialLanguage?.trim() || null,
+        race: familyReport.deceased.race?.trim() || null,
+        profession: familyReport.deceased.profession?.trim() || null,
+        fatherNic: familyReport.deceased.fatherNic?.trim() || null,
+        fatherName: familyReport.deceased.fatherName?.trim() || null,
+        motherNic: familyReport.deceased.motherNic?.trim() || null,
+        motherName: familyReport.deceased.motherName?.trim() || null,
+      },
+      death: {
+        ...familyReport.death,
+        time: familyReport.death.time?.trim() || null,
+        placeOfficialLanguage: familyReport.death.placeOfficialLanguage?.trim() || null,
+        familyNarrative: familyReport.death.familyNarrative?.trim() || null,
+        burialOrCremationPlace: familyReport.death.burialOrCremationPlace?.trim() || null,
+      },
+      maternal: {
+        ...familyReport.maternal,
+      },
+      informant: {
+        ...familyReport.informant,
+        otherCapacityText: familyReport.informant.otherCapacityText?.trim() || null,
+        landline: familyReport.informant.landline?.trim() || null,
+        email: familyReport.informant.email?.trim() || null,
+      },
+    });
 
-      await createCase(payload, token);
-      setShowCreateForm(false);
-      setBasicData({
-        deceasedFullName: "",
-        deceasedNic: "",
-        dateOfBirth: "",
-        dateOfDeath: "",
-        gender: "MALE",
-        sectorCode: "KANDY-01",
-        address: "",
-        doctorId: "",
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      toast({
+        title: "Validation Error",
+        description: issue?.message || "Please complete the required fields.",
+        variant: "destructive",
       });
-      setCr2Fields({ ...INITIAL_CR2_FIELDS });
+      setSubmittingCase(false);
+      return;
+    }
+
+    try {
+      await createCase({ familyReport: parsed.data }, token);
+      setShowCreateForm(false);
+      setFamilyReport(createInitialFamilyReport());
       await fetchCases();
 
       toast({
         title: "Case Created",
         description: "Your death report has been submitted successfully.",
-        variant: "default",
       });
     } catch (err: any) {
       toast({
@@ -153,7 +162,7 @@ export function FamilyDashboard() {
     if (!doctorId) {
       toast({
         title: "Validation Error",
-        description: "Please enter a Doctor ID (e.g. DOC-A1B2C3).",
+        description: "Please enter a Doctor ID (for example, DOC-A1B2C3).",
         variant: "destructive",
       });
       return;
@@ -162,11 +171,10 @@ export function FamilyDashboard() {
     setAssigningDoctor(caseId);
 
     try {
-      await assignDoctor(caseId, doctorId as any, token);
+      await assignDoctor(caseId, doctorId, token);
       toast({
         title: "Doctor Assigned",
-        description: "The doctor has been assigned. The case is now pending medical review.",
-        variant: "default",
+        description: "The case is now pending medical review.",
       });
       await fetchCases();
     } catch (err: any) {
@@ -182,12 +190,10 @@ export function FamilyDashboard() {
 
   const handleOpenCr2View = async (caseId: number) => {
     setCr2LoadingCaseId(caseId);
-
     try {
       const details = await getCaseDetail(caseId, token);
       setCr2CaseId(caseId);
       setCr2CaseDetails(details);
-      setIsViewMode(true);
     } catch (err: any) {
       toast({
         title: "Error",
@@ -204,80 +210,57 @@ export function FamilyDashboard() {
     router.push(target);
   };
 
+  const updateReport = <K extends keyof CanonicalFamilyReport>(key: K, value: CanonicalFamilyReport[K]) => {
+    setFamilyReport((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const updateDeceased = <K extends keyof CanonicalFamilyReport["deceased"]>(
+    key: K,
+    value: CanonicalFamilyReport["deceased"][K],
+  ) => {
+    setFamilyReport((prev) => ({ ...prev, deceased: { ...prev.deceased, [key]: value } }));
+  };
+
+  const updatePermanentAddress = <K extends keyof CanonicalFamilyReport["deceased"]["permanentAddress"]>(
+    key: K,
+    value: CanonicalFamilyReport["deceased"]["permanentAddress"][K],
+  ) => {
+    setFamilyReport((prev) => ({
+      ...prev,
+      deceased: {
+        ...prev.deceased,
+        permanentAddress: { ...prev.deceased.permanentAddress, [key]: value },
+      },
+    }));
+  };
+
+  const updateDeath = <K extends keyof CanonicalFamilyReport["death"]>(
+    key: K,
+    value: CanonicalFamilyReport["death"][K],
+  ) => {
+    setFamilyReport((prev) => ({ ...prev, death: { ...prev.death, [key]: value } }));
+  };
+
+  const updateMaternal = <K extends keyof CanonicalFamilyReport["maternal"]>(
+    key: K,
+    value: CanonicalFamilyReport["maternal"][K],
+  ) => {
+    setFamilyReport((prev) => ({ ...prev, maternal: { ...prev.maternal, [key]: value } }));
+  };
+
+  const updateInformant = <K extends keyof CanonicalFamilyReport["informant"]>(
+    key: K,
+    value: CanonicalFamilyReport["informant"][K],
+  ) => {
+    setFamilyReport((prev) => ({ ...prev, informant: { ...prev.informant, [key]: value } }));
+  };
+
   if (loading) {
     return <div className="p-4 text-center">Loading cases...</div>;
   }
 
-  if (cr2CaseId && cr2CaseDetails && isViewMode) {
-    const dod = cr2CaseDetails.dateOfDeath ? new Date(cr2CaseDetails.dateOfDeath) : null;
-    const dob = cr2CaseDetails.dateOfBirth ? new Date(cr2CaseDetails.dateOfBirth) : null;
-
-    let ageY = 0;
-    let ageM = 0;
-    let ageD = 0;
-
-    if (dob && dod) {
-      ageY = dod.getFullYear() - dob.getFullYear();
-      ageM = dod.getMonth() - dob.getMonth();
-      ageD = dod.getDate() - dob.getDate();
-
-      if (ageD < 0) {
-        ageM--;
-        ageD += new Date(dod.getFullYear(), dod.getMonth(), 0).getDate();
-      }
-
-      if (ageM < 0) {
-        ageY--;
-        ageM += 12;
-      }
-    }
-
-    const sex =
-      cr2CaseDetails.gender?.toLowerCase() === "male"
-        ? "male"
-        : cr2CaseDetails.gender?.toLowerCase() === "female"
-          ? "female"
-          : "";
-
-    let savedCr2Data: Record<string, string> = {};
-    if (cr2CaseDetails.formCr2Family?.cr2FormData) {
-      try {
-        savedCr2Data = JSON.parse(cr2CaseDetails.formCr2Family.cr2FormData);
-      } catch {
-        savedCr2Data = {};
-      }
-    }
-
-    const initialData = {
-      typeOfDeath: "normal",
-      deathYear: dod ? String(dod.getFullYear()) : "",
-      deathMonth: dod ? String(dod.getMonth() + 1) : "",
-      deathDay: dod ? String(dod.getDate()) : "",
-      placeInEnglish: cr2CaseDetails.address || "",
-      regDivision: cr2CaseDetails.sectorName || "",
-      causeEstablished: cr2CaseDetails.formB12 ? "yes" : "",
-      causeOfDeath: cr2CaseDetails.formB12?.primaryCause || "",
-      icdCode: cr2CaseDetails.formB12?.icd10Code || "",
-      causeOfDeathDetail: cr2CaseDetails.formB12?.primaryCause || "",
-      isNaturalDeath: cr2CaseDetails.formB12?.naturalDeath ? "yes" : "no",
-      identificationStatus: cr2CaseDetails.deceasedNic ? "identified" : "not_identified",
-      deceasedNic: cr2CaseDetails.deceasedNic || "",
-      dobYear: dob ? String(dob.getFullYear()) : "",
-      dobMonth: dob ? String(dob.getMonth() + 1) : "",
-      dobDay: dob ? String(dob.getDate()) : "",
-      ageYears: String(ageY),
-      ageMonths: String(ageM),
-      ageDays: String(ageD),
-      deceasedGender: sex,
-      nameEnglish: cr2CaseDetails.deceasedFullName || "",
-      permAddressGn: cr2CaseDetails.sectorName || "",
-      informantName: cr2CaseDetails.applicantName || "",
-      informantId: cr2CaseDetails.applicantNic || "",
-      informantAddress: cr2CaseDetails.address || "",
-      informantSignatureName: cr2CaseDetails.applicantName || "",
-      informantSignatureAddress: cr2CaseDetails.address || "",
-      ...savedCr2Data,
-    };
+  if (cr2CaseId && cr2CaseDetails) {
+    const initialData = caseDetailToPrefill(cr2CaseDetails).cr2;
 
     return (
       <div className="space-y-4">
@@ -287,7 +270,6 @@ export function FamilyDashboard() {
             onClick={() => {
               setCr2CaseId(null);
               setCr2CaseDetails(null);
-              setIsViewMode(false);
             }}
             className="text-sm text-gray-500 hover:text-gray-700 underline"
           >
@@ -297,14 +279,13 @@ export function FamilyDashboard() {
 
         <DeathDeclarationForm
           mode="family"
-          isReviewFlow={true}
+          isReviewFlow
           initialData={initialData}
-          isReadOnly={true}
+          isReadOnly
           onReviewSubmit={async () => {}}
           onCancel={() => {
             setCr2CaseId(null);
             setCr2CaseDetails(null);
-            setIsViewMode(false);
           }}
           pdfFileName={buildCr02FileName(cr2CaseDetails.deceasedFullName, cr2CaseId)}
         />
@@ -327,7 +308,7 @@ export function FamilyDashboard() {
                 <div>
                   <h2 className="text-2xl font-bold sm:text-3xl">Manage death registration and cemetery booking in one place</h2>
                   <p className="mt-2 text-sm text-blue-100 sm:text-base">
-                    Track active cases, open finalized CR-02 forms, and move directly to the cemetery booking process from a cleaner dashboard.
+                    Track active cases, review finalized CR-2 declarations, and keep the doctor-assignment step moving when medical confirmation is needed.
                   </p>
                 </div>
               </div>
@@ -357,7 +338,7 @@ export function FamilyDashboard() {
             <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5">
               <p className="text-sm font-medium text-emerald-700">Completed CR-02</p>
               <p className="mt-2 text-3xl font-bold text-emerald-950">{completedCases.length}</p>
-              <p className="mt-1 text-sm text-emerald-800">Finalized certificates ready for viewing, download, and burial planning.</p>
+              <p className="mt-1 text-sm text-emerald-800">Finalized certificates ready for viewing and burial planning.</p>
             </div>
             <div className="rounded-2xl border border-amber-100 bg-amber-50 p-5">
               <p className="text-sm font-medium text-amber-700">Action Needed</p>
@@ -369,11 +350,11 @@ export function FamilyDashboard() {
       )}
 
       {showCreateForm && (
-        <form onSubmit={handleCreateCase} className="bg-gray-50 p-6 rounded-lg border border-gray-200 space-y-6">
+        <form onSubmit={handleCreateCase} className="space-y-6 rounded-2xl border border-gray-200 bg-gray-50 p-6">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 className="text-lg font-semibold text-gray-800">Initial Death Report</h3>
-              <p className="text-sm text-gray-500">Start a new death registration case and pre-fill the future CR-02 declaration.</p>
+              <p className="text-sm text-gray-500">This report becomes the canonical source for B-24, CR-2, and the B-12 header.</p>
             </div>
             <button
               type="button"
@@ -384,109 +365,530 @@ export function FamilyDashboard() {
             </button>
           </div>
 
-          <div>
-            <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Deceased Information</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Workflow</h4>
+              <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">Natural Death at Home</span>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Deceased Full Name *</label>
-                <input type="text" required value={basicData.deceasedFullName} onChange={(e) => setBasicData({ ...basicData, deceasedFullName: e.target.value })} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
+                <label className="block text-sm font-medium text-gray-700">Sector Code *</label>
+                <input
+                  type="text"
+                  value={familyReport.sectorCode}
+                  onChange={(e) => updateReport("sectorCode", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Deceased NIC</label>
-                <input type="text" value={basicData.deceasedNic} onChange={(e) => setBasicData({ ...basicData, deceasedNic: e.target.value })} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
+                <label className="block text-sm font-medium text-gray-700">Doctor ID (Optional)</label>
+                <input
+                  type="text"
+                  value={familyReport.doctorId || ""}
+                  onChange={(e) => updateReport("doctorId", e.target.value || null)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  placeholder="e.g. DOC-A1B2C3"
+                />
+              </div>
+            </div>
+          </section>
+
+          <section className="space-y-4 border-t border-gray-200 pt-4">
+            <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Deceased Information</h4>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Identification Status *</label>
+                <select
+                  value={familyReport.deceased.identificationStatus}
+                  onChange={(e) => updateDeceased("identificationStatus", e.target.value as CanonicalFamilyReport["deceased"]["identificationStatus"])}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                >
+                  <option value="IDENTIFIED_SRI_LANKAN">Identified Sri Lankan</option>
+                  <option value="IDENTIFIED_FOREIGNER">Identified Foreigner</option>
+                  <option value="NOT_IDENTIFIED">Not Identified</option>
+                </select>
+              </div>
+              {familyReport.deceased.identificationStatus === "IDENTIFIED_SRI_LANKAN" && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">NIC *</label>
+                  <input
+                    type="text"
+                    value={familyReport.deceased.nic || ""}
+                    onChange={(e) => updateDeceased("nic", e.target.value)}
+                    className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  />
+                </div>
+              )}
+              {familyReport.deceased.identificationStatus === "IDENTIFIED_FOREIGNER" && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Passport Country *</label>
+                    <input
+                      type="text"
+                      value={familyReport.deceased.passportCountry || ""}
+                      onChange={(e) => updateDeceased("passportCountry", e.target.value)}
+                      className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Passport Number *</label>
+                    <input
+                      type="text"
+                      value={familyReport.deceased.passportNumber || ""}
+                      onChange={(e) => updateDeceased("passportNumber", e.target.value)}
+                      className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                    />
+                  </div>
+                </>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Full Name (Official Language)</label>
+                <input
+                  type="text"
+                  value={familyReport.deceased.fullNameOfficialLanguage || ""}
+                  onChange={(e) => updateDeceased("fullNameOfficialLanguage", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Full Name (English) *</label>
+                <input
+                  type="text"
+                  value={familyReport.deceased.fullNameEnglish}
+                  onChange={(e) => updateDeceased("fullNameEnglish", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Date of Birth</label>
-                <input type="date" value={basicData.dateOfBirth} onChange={(e) => setBasicData({ ...basicData, dateOfBirth: e.target.value })} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
+                <input
+                  type="date"
+                  value={familyReport.deceased.dateOfBirth || ""}
+                  onChange={(e) => updateDeceased("dateOfBirth", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Age Years</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={familyReport.deceased.ageYears ?? ""}
+                    onChange={(e) => updateDeceased("ageYears", numberOrNull(e.target.value))}
+                    className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Age Months</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={11}
+                    value={familyReport.deceased.ageMonths ?? ""}
+                    onChange={(e) => updateDeceased("ageMonths", numberOrNull(e.target.value))}
+                    className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Age Days</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={31}
+                    value={familyReport.deceased.ageDays ?? ""}
+                    onChange={(e) => updateDeceased("ageDays", numberOrNull(e.target.value))}
+                    className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  />
+                </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Date of Death *</label>
-                <input type="date" required value={basicData.dateOfDeath} onChange={(e) => setBasicData({ ...basicData, dateOfDeath: e.target.value })} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
+                <label className="block text-sm font-medium text-gray-700">Nationality *</label>
+                <input
+                  type="text"
+                  value={familyReport.deceased.nationality}
+                  onChange={(e) => updateDeceased("nationality", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Gender *</label>
-                <select value={basicData.gender} onChange={(e) => setBasicData({ ...basicData, gender: e.target.value })} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border">
+                <select
+                  value={familyReport.deceased.gender}
+                  onChange={(e) => updateDeceased("gender", e.target.value as CanonicalFamilyReport["deceased"]["gender"])}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                >
                   <option value="MALE">Male</option>
                   <option value="FEMALE">Female</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Sector Code *</label>
-                <input type="text" required value={basicData.sectorCode} onChange={(e) => setBasicData({ ...basicData, sectorCode: e.target.value })} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" placeholder="e.g. KANDY-01" />
+                <label className="block text-sm font-medium text-gray-700">Race</label>
+                <input
+                  type="text"
+                  value={familyReport.deceased.race || ""}
+                  onChange={(e) => updateDeceased("race", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Profession</label>
+                <input
+                  type="text"
+                  value={familyReport.deceased.profession || ""}
+                  onChange={(e) => updateDeceased("profession", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Pension Status</label>
+                <select
+                  value={familyReport.deceased.pensionStatus == null ? "" : familyReport.deceased.pensionStatus ? "yes" : "no"}
+                  onChange={(e) =>
+                    updateDeceased(
+                      "pensionStatus",
+                      e.target.value === "" ? null : e.target.value === "yes",
+                    )
+                  }
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                >
+                  <option value="">Select</option>
+                  <option value="yes">Pensioner</option>
+                  <option value="no">Not a pensioner</option>
+                </select>
               </div>
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">Address *</label>
-                <input type="text" required value={basicData.address} onChange={(e) => setBasicData({ ...basicData, address: e.target.value })} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
+                <label className="block text-sm font-medium text-gray-700">Permanent Address *</label>
+                <textarea
+                  value={familyReport.deceased.permanentAddress.fullText}
+                  onChange={(e) => updatePermanentAddress("fullText", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  rows={2}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Permanent District *</label>
+                <input
+                  type="text"
+                  value={familyReport.deceased.permanentAddress.district}
+                  onChange={(e) => updatePermanentAddress("district", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Permanent DS Division *</label>
+                <input
+                  type="text"
+                  value={familyReport.deceased.permanentAddress.dsDivision}
+                  onChange={(e) => updatePermanentAddress("dsDivision", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Permanent GN Division *</label>
+                <input
+                  type="text"
+                  value={familyReport.deceased.permanentAddress.gnDivision}
+                  onChange={(e) => updatePermanentAddress("gnDivision", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Father NIC</label>
+                <input
+                  type="text"
+                  value={familyReport.deceased.fatherNic || ""}
+                  onChange={(e) => updateDeceased("fatherNic", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Father Name</label>
+                <input
+                  type="text"
+                  value={familyReport.deceased.fatherName || ""}
+                  onChange={(e) => updateDeceased("fatherName", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Mother NIC</label>
+                <input
+                  type="text"
+                  value={familyReport.deceased.motherNic || ""}
+                  onChange={(e) => updateDeceased("motherNic", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Mother Name</label>
+                <input
+                  type="text"
+                  value={familyReport.deceased.motherName || ""}
+                  onChange={(e) => updateDeceased("motherName", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
               </div>
             </div>
-          </div>
+          </section>
 
-          <div className="border-t border-gray-200 pt-4">
-            <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-1">CR-02 Declaration Details</h4>
-            <p className="text-xs text-gray-500 mb-3">This information will pre-fill the Registrar&apos;s form. Please complete as accurately as possible.</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <section className="space-y-4 border-t border-gray-200 pt-4">
+            <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Death Details</h4>
+            <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Place of Death (English)</label>
-                <input type="text" value={cr2Fields.placeInEnglish} onChange={(e) => setCr2Fields({ ...cr2Fields, placeInEnglish: e.target.value })} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" placeholder="Hospital / home address" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Place of Death (Sinhala/Tamil)</label>
-                <input type="text" value={cr2Fields.placeInSinhalaOrTamil} onChange={(e) => setCr2Fields({ ...cr2Fields, placeInSinhalaOrTamil: e.target.value })} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
+                <label className="block text-sm font-medium text-gray-700">Date of Death *</label>
+                <input
+                  type="date"
+                  value={familyReport.death.date}
+                  onChange={(e) => updateDeath("date", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Time of Death</label>
-                <input type="time" value={cr2Fields.timeOfDeath} onChange={(e) => setCr2Fields({ ...cr2Fields, timeOfDeath: e.target.value })} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
+                <input
+                  type="time"
+                  value={familyReport.death.time || ""}
+                  onChange={(e) => updateDeath("time", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Location Type</label>
-                <select value={cr2Fields.deathLocation} onChange={(e) => setCr2Fields({ ...cr2Fields, deathLocation: e.target.value })} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border">
-                  <option value="">-- Select --</option>
-                  <option value="hospital">Hospital</option>
-                  <option value="home">Home</option>
-                  <option value="other">Other</option>
+                <label className="block text-sm font-medium text-gray-700">Place of Death (Official Language)</label>
+                <input
+                  type="text"
+                  value={familyReport.death.placeOfficialLanguage || ""}
+                  onChange={(e) => updateDeath("placeOfficialLanguage", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Place of Death (English) *</label>
+                <input
+                  type="text"
+                  value={familyReport.death.placeEnglish}
+                  onChange={(e) => updateDeath("placeEnglish", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Place District *</label>
+                <input
+                  type="text"
+                  value={familyReport.death.placeDistrict}
+                  onChange={(e) => updateDeath("placeDistrict", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Place DS Division *</label>
+                <input
+                  type="text"
+                  value={familyReport.death.placeDsDivision}
+                  onChange={(e) => updateDeath("placeDsDivision", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Registration Division *</label>
+                <input
+                  type="text"
+                  value={familyReport.death.registrationDivision}
+                  onChange={(e) => updateDeath("registrationDivision", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Cause Known by Family</label>
+                <select
+                  value={familyReport.death.causeKnownByFamily == null ? "" : familyReport.death.causeKnownByFamily ? "yes" : "no"}
+                  onChange={(e) => updateDeath("causeKnownByFamily", e.target.value === "" ? null : e.target.value === "yes")}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                >
+                  <option value="">Select</option>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">District</label>
-                <input type="text" value={cr2Fields.district} onChange={(e) => setCr2Fields({ ...cr2Fields, district: e.target.value })} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">Family Narrative</label>
+                <textarea
+                  value={familyReport.death.familyNarrative || ""}
+                  onChange={(e) => updateDeath("familyNarrative", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  rows={3}
+                />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">DS Division</label>
-                <input type="text" value={cr2Fields.dsDivision} onChange={(e) => setCr2Fields({ ...cr2Fields, dsDivision: e.target.value })} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Registrar Division</label>
-                <input type="text" value={cr2Fields.regDivision} onChange={(e) => setCr2Fields({ ...cr2Fields, regDivision: e.target.value })} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Burial Place</label>
-                <input type="text" value={cr2Fields.burialPlace} onChange={(e) => setCr2Fields({ ...cr2Fields, burialPlace: e.target.value })} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Informant Capacity</label>
-                <input type="text" value={cr2Fields.informantCapacity} onChange={(e) => setCr2Fields({ ...cr2Fields, informantCapacity: e.target.value })} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" placeholder="e.g. Son, Daughter, Spouse" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Informant Phone</label>
-                <input type="tel" value={cr2Fields.informantPhone} onChange={(e) => setCr2Fields({ ...cr2Fields, informantPhone: e.target.value })} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">Burial or Cremation Place</label>
+                <input
+                  type="text"
+                  value={familyReport.death.burialOrCremationPlace || ""}
+                  onChange={(e) => updateDeath("burialOrCremationPlace", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  placeholder="Optional and non-blocking"
+                />
               </div>
             </div>
-          </div>
+          </section>
 
-          <div className="border-t border-gray-200 pt-4">
-            <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-1">Doctor Pre-Assignment (Optional)</h4>
-            <p className="text-xs text-gray-500 mb-3">If the GN requests a medical confirmation, this doctor will be automatically notified. You can also provide one later if required.</p>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Doctor ID</label>
-              <input type="text" value={basicData.doctorId} onChange={(e) => setBasicData({ ...basicData, doctorId: e.target.value })} className="mt-1 block w-full md:w-1/2 rounded-md border-gray-300 shadow-sm p-2 border" placeholder="e.g. DOC-A1B2C3" />
+          {showMaternal && (
+            <section className="space-y-4 border-t border-gray-200 pt-4">
+              <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Maternal Information</h4>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Pregnant at Death</label>
+                  <select
+                    value={familyReport.maternal.wasPregnantAtDeath == null ? "" : familyReport.maternal.wasPregnantAtDeath ? "yes" : "no"}
+                    onChange={(e) => updateMaternal("wasPregnantAtDeath", e.target.value === "" ? null : e.target.value === "yes")}
+                    className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  >
+                    <option value="">Select</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Gave Birth Within 42 Days</label>
+                  <select
+                    value={familyReport.maternal.gaveBirthWithin42Days == null ? "" : familyReport.maternal.gaveBirthWithin42Days ? "yes" : "no"}
+                    onChange={(e) => updateMaternal("gaveBirthWithin42Days", e.target.value === "" ? null : e.target.value === "yes")}
+                    className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  >
+                    <option value="">Select</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Had Abortion</label>
+                  <select
+                    value={familyReport.maternal.hadAbortion == null ? "" : familyReport.maternal.hadAbortion ? "yes" : "no"}
+                    onChange={(e) => updateMaternal("hadAbortion", e.target.value === "" ? null : e.target.value === "yes")}
+                    className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  >
+                    <option value="">Select</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Days Since Birth or Abortion</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={familyReport.maternal.daysSinceBirthOrAbortion ?? ""}
+                    onChange={(e) => updateMaternal("daysSinceBirthOrAbortion", numberOrNull(e.target.value))}
+                    className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  />
+                </div>
+              </div>
+            </section>
+          )}
+
+          <section className="space-y-4 border-t border-gray-200 pt-4">
+            <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Informant Information</h4>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Relationship *</label>
+                <select
+                  value={familyReport.informant.capacity}
+                  onChange={(e) => updateInformant("capacity", e.target.value as CanonicalFamilyReport["informant"]["capacity"])}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                >
+                  <option value="HUSBAND_WIFE">Husband / Wife</option>
+                  <option value="FATHER_MOTHER">Father / Mother</option>
+                  <option value="SON_DAUGHTER">Son / Daughter</option>
+                  <option value="BROTHER_SISTER">Brother / Sister</option>
+                  <option value="RELATIVE">Relative</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </div>
+              {familyReport.informant.capacity === "OTHER" && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Describe Relationship *</label>
+                  <input
+                    type="text"
+                    value={familyReport.informant.otherCapacityText || ""}
+                    onChange={(e) => updateInformant("otherCapacityText", e.target.value)}
+                    className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  />
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Informant NIC or Passport *</label>
+                <input
+                  type="text"
+                  value={familyReport.informant.nicOrPassport}
+                  onChange={(e) => updateInformant("nicOrPassport", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Informant Full Name *</label>
+                <input
+                  type="text"
+                  value={familyReport.informant.fullName}
+                  onChange={(e) => updateInformant("fullName", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">Postal Address *</label>
+                <textarea
+                  value={familyReport.informant.postalAddress}
+                  onChange={(e) => updateInformant("postalAddress", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  rows={2}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Mobile *</label>
+                <input
+                  type="tel"
+                  value={familyReport.informant.mobile}
+                  onChange={(e) => updateInformant("mobile", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Landline</label>
+                <input
+                  type="tel"
+                  value={familyReport.informant.landline || ""}
+                  onChange={(e) => updateInformant("landline", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Email</label>
+                <input
+                  type="email"
+                  value={familyReport.informant.email || ""}
+                  onChange={(e) => updateInformant("email", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
             </div>
-          </div>
+          </section>
+
+          <section className="space-y-4 border-t border-gray-200 pt-4">
+            <label className="flex items-start gap-3 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={familyReport.declarationConfirmed}
+                onChange={(e) => updateReport("declarationConfirmed", e.target.checked)}
+                className="mt-1"
+              />
+              <span>I confirm that this information is true and will be used as the canonical source for the later registration workflow.</span>
+            </label>
+          </section>
 
           <div className="flex gap-3">
-            <button type="submit" disabled={submittingCase} className="bg-blue-600 text-white px-5 py-2 rounded font-medium hover:bg-blue-700 disabled:opacity-60">
+            <button type="submit" disabled={submittingCase} className="rounded bg-blue-600 px-5 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-60">
               {submittingCase ? "Submitting..." : "Submit Report"}
             </button>
-            <button type="button" onClick={() => setShowCreateForm(false)} className="bg-gray-200 text-gray-800 px-5 py-2 rounded font-medium hover:bg-gray-300">
+            <button type="button" onClick={() => setShowCreateForm(false)} className="rounded bg-gray-200 px-5 py-2 font-medium text-gray-800 hover:bg-gray-300">
               Cancel
             </button>
           </div>
@@ -494,8 +896,8 @@ export function FamilyDashboard() {
       )}
 
       {!showCreateForm && cases.length === 0 && (
-        <div className="text-center py-12 rounded-2xl border border-dashed border-gray-300 bg-gray-50 text-gray-500">
-          No active cases found. Click &quot;Report a Death&quot; to start the process.
+        <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 py-12 text-center text-gray-500">
+          No active cases found. Click "Report a Death" to start the process.
         </div>
       )}
 
@@ -511,7 +913,7 @@ export function FamilyDashboard() {
                       {caseItem.status.replace(/_/g, " ")}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-500">NIC: {caseItem.deceasedNic || "Not provided"} • Case #{caseItem.caseId}</p>
+                  <p className="text-sm text-gray-500">NIC: {caseItem.deceasedNic || "Not provided"} | Case #{caseItem.caseId}</p>
                 </div>
 
                 <div className="flex flex-wrap gap-3">
@@ -583,7 +985,7 @@ export function FamilyDashboard() {
                 <div className="mt-4 rounded-xl border border-red-300 bg-red-50 p-4 shadow-sm">
                   <h4 className="text-lg font-bold text-red-900">Case Rejected: Unnatural Death</h4>
                   <p className="mt-2 text-sm font-medium text-red-800">
-                    The certifying Medical Officer has officially logged this case as an unnatural death. The standard death registration process cannot continue.
+                    The certifying Medical Officer has logged this case as an unnatural death. The standard death registration process cannot continue.
                     <br />
                     <br />
                     <strong>Required action:</strong> Please report this immediately to your local police station for further investigation.

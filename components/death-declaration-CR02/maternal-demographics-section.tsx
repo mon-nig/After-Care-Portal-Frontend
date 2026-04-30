@@ -97,6 +97,7 @@ export function MaternalDemographicsSection({ formData, onChange, visible }: Mat
         <div className="flex items-center gap-2">
           <Input
             id="maternalTimelineDays"
+            name="maternalTimelineDays"
             type="number"
             min="0"
             className="w-24"

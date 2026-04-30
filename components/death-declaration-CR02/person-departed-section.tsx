@@ -220,6 +220,17 @@ export function PersonDepartedSection({ formData, onChange }: PersonDepartedSect
           <span className="text-muted-foreground mr-1.5">(17)</span>
           Permanent Address
         </Label>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="permAddressFullText" className="text-xs text-muted-foreground">
+            Full Address
+          </Label>
+          <Input
+            id="permAddressFullText"
+            name="permAddressFullText"
+            value={formData.permAddressFullText || ""}
+            onChange={(e) => onChange("permAddressFullText", e.target.value)}
+          />
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="permAddressDistrict" className="text-xs text-muted-foreground">
@@ -227,6 +238,7 @@ export function PersonDepartedSection({ formData, onChange }: PersonDepartedSect
             </Label>
             <Input
               id="permAddressDistrict"
+              name="permAddressDistrict"
               value={formData.permAddressDistrict || ""}
               onChange={(e) => onChange("permAddressDistrict", e.target.value)}
             />
@@ -237,6 +249,7 @@ export function PersonDepartedSection({ formData, onChange }: PersonDepartedSect
             </Label>
             <Input
               id="permAddressDs"
+              name="permAddressDs"
               value={formData.permAddressDs || ""}
               onChange={(e) => onChange("permAddressDs", e.target.value)}
             />
@@ -247,6 +260,7 @@ export function PersonDepartedSection({ formData, onChange }: PersonDepartedSect
             </Label>
             <Input
               id="permAddressGn"
+              name="permAddressGn"
               value={formData.permAddressGn || ""}
               onChange={(e) => onChange("permAddressGn", e.target.value)}
             />
@@ -306,6 +320,7 @@ export function PersonDepartedSection({ formData, onChange }: PersonDepartedSect
             </Label>
             <Input
               id="fatherNic"
+              name="fatherNic"
               value={formData.fatherNic || ""}
               onChange={(e) => onChange("fatherNic", e.target.value)}
             />
@@ -317,6 +332,7 @@ export function PersonDepartedSection({ formData, onChange }: PersonDepartedSect
             </Label>
             <Input
               id="fatherName"
+              name="fatherName"
               value={formData.fatherName || ""}
               onChange={(e) => onChange("fatherName", e.target.value)}
             />
@@ -332,6 +348,7 @@ export function PersonDepartedSection({ formData, onChange }: PersonDepartedSect
             </Label>
             <Input
               id="motherNic"
+              name="motherNic"
               value={formData.motherNic || ""}
               onChange={(e) => onChange("motherNic", e.target.value)}
             />
@@ -343,6 +360,7 @@ export function PersonDepartedSection({ formData, onChange }: PersonDepartedSect
             </Label>
             <Input
               id="motherName"
+              name="motherName"
               value={formData.motherName || ""}
               onChange={(e) => onChange("motherName", e.target.value)}
             />

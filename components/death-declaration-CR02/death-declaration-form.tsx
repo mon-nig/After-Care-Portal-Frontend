@@ -46,6 +46,10 @@ export function DeathDeclarationForm({ initialData, isReviewFlow, onReviewSubmit
   const pdfContentRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    setFormData(initialData || {})
+  }, [initialData])
+
+  useEffect(() => {
     if (!formRef.current || preFilledKeys.size === 0) return
     const inputs = formRef.current.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("input, textarea, select")
     inputs.forEach((element) => {
@@ -125,7 +129,7 @@ export function DeathDeclarationForm({ initialData, isReviewFlow, onReviewSubmit
     <form
       ref={formRef}
       onSubmit={handleSubmit}
-      className="space-y-6 bg-white rounded-xl border border-border/40 shadow-sm p-4 sm:p-8"
+      className="cr2-form-prefilled space-y-6 bg-white rounded-xl border border-border/40 shadow-sm p-4 sm:p-8"
     >
       <div ref={pdfContentRef} className="space-y-6">
         <fieldset disabled={isReadOnly} className="contents">
