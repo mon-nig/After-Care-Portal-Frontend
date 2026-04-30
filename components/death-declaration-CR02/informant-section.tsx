@@ -66,6 +66,21 @@ export function InformantSection({ formData, onChange }: InformantSectionProps) 
         </RadioGroup>
       </div>
 
+      {formData.informantCapacity === "other" && (
+        <div className="space-y-2">
+          <Label htmlFor="informantOtherCapacityText" className="text-sm font-medium">
+            Please describe the relationship
+          </Label>
+          <Input
+            id="informantOtherCapacityText"
+            name="informantOtherCapacityText"
+            placeholder="Relationship to the deceased"
+            value={formData.informantOtherCapacityText || ""}
+            onChange={(e) => onChange("informantOtherCapacityText", e.target.value)}
+          />
+        </div>
+      )}
+
       {/* (25) Identification Number */}
       <div className="space-y-2">
         <Label htmlFor="informantId" className="text-sm font-medium">
@@ -121,7 +136,7 @@ export function InformantSection({ formData, onChange }: InformantSectionProps) 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="informantPhone" className="text-xs text-muted-foreground">
-              Telephone
+              Mobile
             </Label>
             <Input
               id="informantPhone"
@@ -132,6 +147,21 @@ export function InformantSection({ formData, onChange }: InformantSectionProps) 
               onChange={(e) => onChange("informantPhone", e.target.value)}
             />
           </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="informantLandline" className="text-xs text-muted-foreground">
+              Landline
+            </Label>
+            <Input
+              id="informantLandline"
+              name="informantLandline"
+              type="tel"
+              placeholder="Landline number"
+              value={formData.informantLandline || ""}
+              onChange={(e) => onChange("informantLandline", e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="informantEmail" className="text-xs text-muted-foreground">
               Email

@@ -1,30 +1,72 @@
-import { useState, useEffect } from "react";
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "../../contexts/auth-context";
-import { createCase, getMyCases, getCaseDetail, submitCr2Family } from "../../lib/api";
+import { assignDoctor, createCase, getCaseDetail, getMyCases, type CaseDetailResponse, type CaseListItem } from "../../lib/api";
+import { canonicalFamilyReportSchema, computeAgeAtDeath, createInitialFamilyReport, type CanonicalFamilyReport } from "../../lib/death-report-schema";
+import { caseDetailToPrefill } from "../../lib/mappers/caseDetailToPrefill";
 import { DeathDeclarationForm } from "../death-declaration-CR02/death-declaration-form";
+import { useToast } from "../../hooks/use-toast";
+
+function buildCr02FileName(deceasedName: string | undefined, caseId: number) {
+  const safeName = (deceasedName || `case-${caseId}`)
+    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+
+  return `${safeName || `case-${caseId}`}-cr02.pdf`;
+}
+
+function getStatusTone(status: string) {
+  if (status === "CR2_ISSUED_CLOSED") return "bg-green-100 text-green-800 border-green-200";
+  if (status === "PENDING_DOCTOR_ASSIGNMENT") return "bg-amber-100 text-amber-800 border-amber-200";
+  if (status === "REJECTED_UNNATURAL_DEATH") return "bg-red-100 text-red-800 border-red-200";
+  return "bg-blue-100 text-blue-800 border-blue-200";
+}
+
+function numberOrNull(value: string) {
+  return value.trim() === "" ? null : Number(value);
+}
 
 export function FamilyDashboard() {
   const { token } = useAuth();
-  const [cases, setCases] = useState<any[]>([]);
+  const { toast } = useToast();
+  const router = useRouter();
+
+  const [cases, setCases] = useState<CaseListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [familyReport, setFamilyReport] = useState<CanonicalFamilyReport>(createInitialFamilyReport());
+  const [submittingCase, setSubmittingCase] = useState(false);
 
-  // CR-2 Form state
   const [cr2CaseId, setCr2CaseId] = useState<number | null>(null);
-  const [cr2CaseDetails, setCr2CaseDetails] = useState<any>(null);
-  const [cr2Loading, setCr2Loading] = useState(false);
+  const [cr2CaseDetails, setCr2CaseDetails] = useState<CaseDetailResponse | null>(null);
+  const [cr2LoadingCaseId, setCr2LoadingCaseId] = useState<number | null>(null);
 
-  // Form State
-  const [formData, setFormData] = useState({
-    deceasedFullName: "",
-    deceasedNic: "",
-    dateOfBirth: "",
-    dateOfDeath: "",
-    gender: "MALE",
-    sectorCode: "KANDY-01",
-    address: ""
-  });
+  const [doctorIdInputs, setDoctorIdInputs] = useState<Record<number, string>>({});
+  const [assigningDoctor, setAssigningDoctor] = useState<number | null>(null);
+
+  const completedCases = useMemo(
+    () => cases.filter((caseItem) => caseItem.status === "CR2_ISSUED_CLOSED"),
+    [cases],
+  );
+  const pendingCases = useMemo(
+    () => cases.filter((caseItem) => !["CR2_ISSUED_CLOSED", "REJECTED_UNNATURAL_DEATH"].includes(caseItem.status)),
+    [cases],
+  );
+  const doctorActionCases = useMemo(
+    () => cases.filter((caseItem) => caseItem.status === "PENDING_DOCTOR_ASSIGNMENT"),
+    [cases],
+  );
+
+  const derivedAge =
+    computeAgeAtDeath(familyReport.deceased.dateOfBirth, familyReport.death.date) ?? {
+      years: familyReport.deceased.ageYears ?? 0,
+      months: familyReport.deceased.ageMonths ?? 0,
+      days: familyReport.deceased.ageDays ?? 0,
+    };
+  const showMaternal = familyReport.deceased.gender === "FEMALE" && derivedAge.years < 49;
 
   const fetchCases = async () => {
     try {
@@ -32,130 +74,220 @@ export function FamilyDashboard() {
       const data = await getMyCases(token);
       setCases(data.content || []);
     } catch (err: any) {
-      setError(err.message || "Failed to load cases.");
+      toast({ title: "Error", description: err.message || "Failed to load cases.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (token) fetchCases();
+    if (token) {
+      void fetchCases();
+    }
   }, [token]);
 
   const handleCreateCase = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      await createCase(formData, token);
-      setShowCreateForm(false);
-      setFormData({
-        deceasedFullName: "",
-        deceasedNic: "",
-        dateOfBirth: "",
-        dateOfDeath: "",
-        gender: "MALE",
-        sectorCode: "KANDY-01",
-        address: ""
+    setSubmittingCase(true);
+
+    const parsed = canonicalFamilyReportSchema.safeParse({
+      ...familyReport,
+      doctorId: familyReport.doctorId?.trim() || null,
+      deceased: {
+        ...familyReport.deceased,
+        nic: familyReport.deceased.nic?.trim() || null,
+        passportCountry: familyReport.deceased.passportCountry?.trim() || null,
+        passportNumber: familyReport.deceased.passportNumber?.trim() || null,
+        fullNameOfficialLanguage: familyReport.deceased.fullNameOfficialLanguage?.trim() || null,
+        race: familyReport.deceased.race?.trim() || null,
+        profession: familyReport.deceased.profession?.trim() || null,
+        fatherNic: familyReport.deceased.fatherNic?.trim() || null,
+        fatherName: familyReport.deceased.fatherName?.trim() || null,
+        motherNic: familyReport.deceased.motherNic?.trim() || null,
+        motherName: familyReport.deceased.motherName?.trim() || null,
+      },
+      death: {
+        ...familyReport.death,
+        time: familyReport.death.time?.trim() || null,
+        placeOfficialLanguage: familyReport.death.placeOfficialLanguage?.trim() || null,
+        familyNarrative: familyReport.death.familyNarrative?.trim() || null,
+        burialOrCremationPlace: familyReport.death.burialOrCremationPlace?.trim() || null,
+      },
+      maternal: {
+        ...familyReport.maternal,
+      },
+      informant: {
+        ...familyReport.informant,
+        otherCapacityText: familyReport.informant.otherCapacityText?.trim() || null,
+        landline: familyReport.informant.landline?.trim() || null,
+        email: familyReport.informant.email?.trim() || null,
+      },
+    });
+
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      toast({
+        title: "Validation Error",
+        description: issue?.message || "Please complete the required fields.",
+        variant: "destructive",
       });
-      fetchCases();
+      setSubmittingCase(false);
+      return;
+    }
+
+    try {
+      await createCase({ familyReport: parsed.data }, token);
+      setShowCreateForm(false);
+      setFamilyReport(createInitialFamilyReport());
+      await fetchCases();
+
+      toast({
+        title: "Case Created",
+        description: "Your death report has been submitted successfully.",
+      });
     } catch (err: any) {
-      alert("Error creating case: " + err.message);
+      toast({
+        title: "Submission Failed",
+        description: err.message || "Error creating case.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmittingCase(false);
     }
   };
 
-  const handleOpenCr2Form = async (caseId: number) => {
-    setCr2Loading(true);
+  const handleAssignDoctor = async (caseId: number) => {
+    const doctorId = doctorIdInputs[caseId]?.trim();
+
+    if (!doctorId) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a Doctor ID (for example, DOC-A1B2C3).",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setAssigningDoctor(caseId);
+
+    try {
+      await assignDoctor(caseId, doctorId, token);
+      toast({
+        title: "Doctor Assigned",
+        description: "The case is now pending medical review.",
+      });
+      await fetchCases();
+    } catch (err: any) {
+      toast({
+        title: "Assignment Failed",
+        description: err.message || "Could not assign doctor.",
+        variant: "destructive",
+      });
+    } finally {
+      setAssigningDoctor(null);
+    }
+  };
+
+  const handleOpenCr2View = async (caseId: number) => {
+    setCr2LoadingCaseId(caseId);
     try {
       const details = await getCaseDetail(caseId, token);
       setCr2CaseId(caseId);
       setCr2CaseDetails(details);
     } catch (err: any) {
-      alert("Error loading case details: " + err.message);
+      toast({
+        title: "Error",
+        description: err.message || "Could not load case details.",
+        variant: "destructive",
+      });
     } finally {
-      setCr2Loading(false);
+      setCr2LoadingCaseId(null);
     }
   };
 
-  const handleCr2Submit = async (formPayload: Record<string, string>) => {
-    if (!cr2CaseId) return;
-    await submitCr2Family(cr2CaseId, formPayload, token);
-    setCr2CaseId(null);
-    setCr2CaseDetails(null);
-    fetchCases();
+  const goToCemeteryBooking = (caseId?: number) => {
+    const target = caseId ? `/family/cemetery-booking?caseId=${caseId}` : "/family/cemetery-booking";
+    router.push(target);
   };
 
-  if (loading) return <div className="p-4 text-center">Loading cases...</div>;
+  const updateReport = <K extends keyof CanonicalFamilyReport>(key: K, value: CanonicalFamilyReport[K]) => {
+    setFamilyReport((prev) => ({ ...prev, [key]: value }));
+  };
 
-  // If a CR-2 form is open, show the full form
+  const updateDeceased = <K extends keyof CanonicalFamilyReport["deceased"]>(
+    key: K,
+    value: CanonicalFamilyReport["deceased"][K],
+  ) => {
+    setFamilyReport((prev) => ({ ...prev, deceased: { ...prev.deceased, [key]: value } }));
+  };
+
+  const updatePermanentAddress = <K extends keyof CanonicalFamilyReport["deceased"]["permanentAddress"]>(
+    key: K,
+    value: CanonicalFamilyReport["deceased"]["permanentAddress"][K],
+  ) => {
+    setFamilyReport((prev) => ({
+      ...prev,
+      deceased: {
+        ...prev.deceased,
+        permanentAddress: { ...prev.deceased.permanentAddress, [key]: value },
+      },
+    }));
+  };
+
+  const updateDeath = <K extends keyof CanonicalFamilyReport["death"]>(
+    key: K,
+    value: CanonicalFamilyReport["death"][K],
+  ) => {
+    setFamilyReport((prev) => ({ ...prev, death: { ...prev.death, [key]: value } }));
+  };
+
+  const updateMaternal = <K extends keyof CanonicalFamilyReport["maternal"]>(
+    key: K,
+    value: CanonicalFamilyReport["maternal"][K],
+  ) => {
+    setFamilyReport((prev) => ({ ...prev, maternal: { ...prev.maternal, [key]: value } }));
+  };
+
+  const updateInformant = <K extends keyof CanonicalFamilyReport["informant"]>(
+    key: K,
+    value: CanonicalFamilyReport["informant"][K],
+  ) => {
+    setFamilyReport((prev) => ({ ...prev, informant: { ...prev.informant, [key]: value } }));
+  };
+
+  if (loading) {
+    return <div className="p-4 text-center">Loading cases...</div>;
+  }
+
   if (cr2CaseId && cr2CaseDetails) {
-    const dod = cr2CaseDetails.dateOfDeath ? new Date(cr2CaseDetails.dateOfDeath) : null;
-    const dob = cr2CaseDetails.dateOfBirth ? new Date(cr2CaseDetails.dateOfBirth) : null;
-    let ageY = 0, ageM = 0, ageD = 0;
-    if (dob && dod) {
-      ageY = dod.getFullYear() - dob.getFullYear();
-      ageM = dod.getMonth() - dob.getMonth();
-      ageD = dod.getDate() - dob.getDate();
-      if (ageD < 0) {
-        ageM--;
-        ageD += new Date(dod.getFullYear(), dod.getMonth(), 0).getDate();
-      }
-      if (ageM < 0) {
-        ageY--;
-        ageM += 12;
-      }
-    }
-    const sex = cr2CaseDetails.gender?.toLowerCase() === "male" ? "male"
-              : cr2CaseDetails.gender?.toLowerCase() === "female" ? "female" : "";
+    const initialData = caseDetailToPrefill(cr2CaseDetails).cr2;
 
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-gray-800">
-            Fill CR-2 Declaration — Case #{cr2CaseId}
-          </h2>
+          <h2 className="text-xl font-bold text-gray-800">View Finalized CR-2 Declaration - Case #{cr2CaseId}</h2>
           <button
-            onClick={() => { setCr2CaseId(null); setCr2CaseDetails(null); }}
+            onClick={() => {
+              setCr2CaseId(null);
+              setCr2CaseDetails(null);
+            }}
             className="text-sm text-gray-500 hover:text-gray-700 underline"
           >
-            ← Back to Cases
+            Back to Cases
           </button>
         </div>
-        <p className="text-sm text-gray-600 bg-blue-50 border border-blue-200 p-3 rounded">
-          Please fill out all sections of the Death Declaration form below. The <strong>Officer Section</strong> will be filled by the Registrar after you submit.
-        </p>
+
         <DeathDeclarationForm
           mode="family"
-          isReviewFlow={true}
-          initialData={{
-            typeOfDeath: "normal",
-            deathYear: dod ? String(dod.getFullYear()) : "",
-            deathMonth: dod ? String(dod.getMonth() + 1) : "",
-            deathDay: dod ? String(dod.getDate()) : "",
-            placeInEnglish: cr2CaseDetails.address || "",
-            regDivision: cr2CaseDetails.sectorName || "",
-            causeEstablished: cr2CaseDetails.formB12 ? "yes" : "",
-            causeOfDeath: cr2CaseDetails.formB12?.primaryCause || "",
-            icdCode: cr2CaseDetails.formB12?.icd10Code || "",
-            causeOfDeathDetail: cr2CaseDetails.formB12?.primaryCause || "",
-            isNaturalDeath: cr2CaseDetails.formB12?.naturalDeath ? "yes" : "no",
-            identificationStatus: cr2CaseDetails.deceasedNic ? "identified" : "not_identified",
-            deceasedNic: cr2CaseDetails.deceasedNic || "",
-            dobYear: dob ? String(dob.getFullYear()) : "",
-            dobMonth: dob ? String(dob.getMonth() + 1) : "",
-            dobDay: dob ? String(dob.getDate()) : "",
-            ageYears: String(ageY),
-            ageMonths: String(ageM),
-            ageDays: String(ageD),
-            deceasedGender: sex,
-            nameEnglish: cr2CaseDetails.deceasedFullName || "",
-            permAddressGn: cr2CaseDetails.sectorName || "",
-            informantName: cr2CaseDetails.applicantName || "",
-            informantId: cr2CaseDetails.applicantNic || "",
-            informantAddress: cr2CaseDetails.address || "",
-            informantSignatureName: cr2CaseDetails.applicantName || "",
-            informantSignatureAddress: cr2CaseDetails.address || "",
+          isReviewFlow
+          initialData={initialData}
+          isReadOnly
+          onReviewSubmit={async () => {}}
+          onCancel={() => {
+            setCr2CaseId(null);
+            setCr2CaseDetails(null);
           }}
-          onReviewSubmit={handleCr2Submit}
-          onCancel={() => { setCr2CaseId(null); setCr2CaseDetails(null); }}
+          pdfFileName={buildCr02FileName(cr2CaseDetails.deceasedFullName, cr2CaseId)}
         />
       </div>
     );
@@ -163,120 +295,707 @@ export function FamilyDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-xl font-bold text-gray-800">My Death Registration Cases</h2>
-        {!showCreateForm && (
-          <button 
-            onClick={() => setShowCreateForm(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-medium"
-          >
-            + Report a Death
-          </button>
-        )}
-      </div>
+      {!showCreateForm && (
+        <>
+          <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-900 via-blue-900 to-cyan-800 p-6 text-white shadow-sm">
+            <div className="absolute -right-12 top-0 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
+            <div className="absolute bottom-0 left-0 h-32 w-32 rounded-full bg-cyan-300/10 blur-2xl" />
+            <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+              <div className="max-w-2xl space-y-3">
+                <span className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-medium tracking-[0.2em] uppercase">
+                  Family Member Dashboard
+                </span>
+                <div>
+                  <h2 className="text-2xl font-bold sm:text-3xl">Manage death registration and cemetery booking in one place</h2>
+                  <p className="mt-2 text-sm text-blue-100 sm:text-base">
+                    Track active cases, review finalized CR-2 declarations, and keep the doctor-assignment step moving when medical confirmation is needed.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button
+                  onClick={() => setShowCreateForm(true)}
+                  className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-100"
+                >
+                  Report a Death
+                </button>
+                <button
+                  onClick={() => goToCemeteryBooking()}
+                  className="rounded-xl border border-white/25 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/20"
+                >
+                  Go to Cemetery Booking
+                </button>
+              </div>
+            </div>
+          </section>
 
-      {error && <div className="bg-red-50 text-red-600 p-3 rounded">{error}</div>}
+          <section className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
+              <p className="text-sm font-medium text-blue-700">Active Cases</p>
+              <p className="mt-2 text-3xl font-bold text-blue-950">{pendingCases.length}</p>
+              <p className="mt-1 text-sm text-blue-800">Cases still moving through GN, doctor, or registrar review.</p>
+            </div>
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5">
+              <p className="text-sm font-medium text-emerald-700">Completed CR-02</p>
+              <p className="mt-2 text-3xl font-bold text-emerald-950">{completedCases.length}</p>
+              <p className="mt-1 text-sm text-emerald-800">Finalized certificates ready for viewing and burial planning.</p>
+            </div>
+            <div className="rounded-2xl border border-amber-100 bg-amber-50 p-5">
+              <p className="text-sm font-medium text-amber-700">Action Needed</p>
+              <p className="mt-2 text-3xl font-bold text-amber-950">{doctorActionCases.length}</p>
+              <p className="mt-1 text-sm text-amber-800">Cases waiting for you to provide a doctor for medical confirmation.</p>
+            </div>
+          </section>
+        </>
+      )}
 
       {showCreateForm && (
-        <form onSubmit={handleCreateCase} className="bg-gray-50 p-6 rounded-lg border border-gray-200">
-          <h3 className="text-lg font-semibold mb-4 text-gray-800">Initial Death Report</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <form onSubmit={handleCreateCase} className="space-y-6 rounded-2xl border border-gray-200 bg-gray-50 p-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Deceased Full Name</label>
-              <input type="text" required value={formData.deceasedFullName} onChange={(e) => setFormData({...formData, deceasedFullName: e.target.value})} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
+              <h3 className="text-lg font-semibold text-gray-800">Initial Death Report</h3>
+              <p className="text-sm text-gray-500">This report becomes the canonical source for B-24, CR-2, and the B-12 header.</p>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Deceased NIC</label>
-              <input type="text" required value={formData.deceasedNic} onChange={(e) => setFormData({...formData, deceasedNic: e.target.value})} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Date of Birth</label>
-              <input type="date" required value={formData.dateOfBirth} onChange={(e) => setFormData({...formData, dateOfBirth: e.target.value})} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Date of Death</label>
-              <input type="date" required value={formData.dateOfDeath} onChange={(e) => setFormData({...formData, dateOfDeath: e.target.value})} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Gender</label>
-              <select value={formData.gender} onChange={(e) => setFormData({...formData, gender: e.target.value})} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border">
-                <option value="MALE">Male</option>
-                <option value="FEMALE">Female</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Sector Code</label>
-              <input type="text" required value={formData.sectorCode} onChange={(e) => setFormData({...formData, sectorCode: e.target.value})} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" placeholder="e.g. KANDY-01" />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700">Address</label>
-              <input type="text" required value={formData.address} onChange={(e) => setFormData({...formData, address: e.target.value})} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
-            </div>
+            <button
+              type="button"
+              onClick={() => setShowCreateForm(false)}
+              className="text-sm text-gray-500 underline hover:text-gray-700"
+            >
+              Back to Dashboard
+            </button>
           </div>
-          <div className="mt-6 flex gap-3">
-            <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded font-medium hover:bg-blue-700">Submit Report</button>
-            <button type="button" onClick={() => setShowCreateForm(false)} className="bg-gray-200 text-gray-800 px-4 py-2 rounded font-medium hover:bg-gray-300">Cancel</button>
+
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Workflow</h4>
+              <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">Natural Death at Home</span>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Sector Code *</label>
+                <input
+                  type="text"
+                  value={familyReport.sectorCode}
+                  onChange={(e) => updateReport("sectorCode", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Doctor ID (Optional)</label>
+                <input
+                  type="text"
+                  value={familyReport.doctorId || ""}
+                  onChange={(e) => updateReport("doctorId", e.target.value || null)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  placeholder="e.g. DOC-A1B2C3"
+                />
+              </div>
+            </div>
+          </section>
+
+          <section className="space-y-4 border-t border-gray-200 pt-4">
+            <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Deceased Information</h4>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Identification Status *</label>
+                <select
+                  value={familyReport.deceased.identificationStatus}
+                  onChange={(e) => updateDeceased("identificationStatus", e.target.value as CanonicalFamilyReport["deceased"]["identificationStatus"])}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                >
+                  <option value="IDENTIFIED_SRI_LANKAN">Identified Sri Lankan</option>
+                  <option value="IDENTIFIED_FOREIGNER">Identified Foreigner</option>
+                  <option value="NOT_IDENTIFIED">Not Identified</option>
+                </select>
+              </div>
+              {familyReport.deceased.identificationStatus === "IDENTIFIED_SRI_LANKAN" && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">NIC *</label>
+                  <input
+                    type="text"
+                    value={familyReport.deceased.nic || ""}
+                    onChange={(e) => updateDeceased("nic", e.target.value)}
+                    className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  />
+                </div>
+              )}
+              {familyReport.deceased.identificationStatus === "IDENTIFIED_FOREIGNER" && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Passport Country *</label>
+                    <input
+                      type="text"
+                      value={familyReport.deceased.passportCountry || ""}
+                      onChange={(e) => updateDeceased("passportCountry", e.target.value)}
+                      className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Passport Number *</label>
+                    <input
+                      type="text"
+                      value={familyReport.deceased.passportNumber || ""}
+                      onChange={(e) => updateDeceased("passportNumber", e.target.value)}
+                      className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                    />
+                  </div>
+                </>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Full Name (Official Language)</label>
+                <input
+                  type="text"
+                  value={familyReport.deceased.fullNameOfficialLanguage || ""}
+                  onChange={(e) => updateDeceased("fullNameOfficialLanguage", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Full Name (English) *</label>
+                <input
+                  type="text"
+                  value={familyReport.deceased.fullNameEnglish}
+                  onChange={(e) => updateDeceased("fullNameEnglish", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Date of Birth</label>
+                <input
+                  type="date"
+                  value={familyReport.deceased.dateOfBirth || ""}
+                  onChange={(e) => updateDeceased("dateOfBirth", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Age Years</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={familyReport.deceased.ageYears ?? ""}
+                    onChange={(e) => updateDeceased("ageYears", numberOrNull(e.target.value))}
+                    className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Age Months</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={11}
+                    value={familyReport.deceased.ageMonths ?? ""}
+                    onChange={(e) => updateDeceased("ageMonths", numberOrNull(e.target.value))}
+                    className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Age Days</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={31}
+                    value={familyReport.deceased.ageDays ?? ""}
+                    onChange={(e) => updateDeceased("ageDays", numberOrNull(e.target.value))}
+                    className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Nationality *</label>
+                <input
+                  type="text"
+                  value={familyReport.deceased.nationality}
+                  onChange={(e) => updateDeceased("nationality", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Gender *</label>
+                <select
+                  value={familyReport.deceased.gender}
+                  onChange={(e) => updateDeceased("gender", e.target.value as CanonicalFamilyReport["deceased"]["gender"])}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                >
+                  <option value="MALE">Male</option>
+                  <option value="FEMALE">Female</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Race</label>
+                <input
+                  type="text"
+                  value={familyReport.deceased.race || ""}
+                  onChange={(e) => updateDeceased("race", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Profession</label>
+                <input
+                  type="text"
+                  value={familyReport.deceased.profession || ""}
+                  onChange={(e) => updateDeceased("profession", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Pension Status</label>
+                <select
+                  value={familyReport.deceased.pensionStatus == null ? "" : familyReport.deceased.pensionStatus ? "yes" : "no"}
+                  onChange={(e) =>
+                    updateDeceased(
+                      "pensionStatus",
+                      e.target.value === "" ? null : e.target.value === "yes",
+                    )
+                  }
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                >
+                  <option value="">Select</option>
+                  <option value="yes">Pensioner</option>
+                  <option value="no">Not a pensioner</option>
+                </select>
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">Permanent Address *</label>
+                <textarea
+                  value={familyReport.deceased.permanentAddress.fullText}
+                  onChange={(e) => updatePermanentAddress("fullText", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  rows={2}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Permanent District *</label>
+                <input
+                  type="text"
+                  value={familyReport.deceased.permanentAddress.district}
+                  onChange={(e) => updatePermanentAddress("district", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Permanent DS Division *</label>
+                <input
+                  type="text"
+                  value={familyReport.deceased.permanentAddress.dsDivision}
+                  onChange={(e) => updatePermanentAddress("dsDivision", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Permanent GN Division *</label>
+                <input
+                  type="text"
+                  value={familyReport.deceased.permanentAddress.gnDivision}
+                  onChange={(e) => updatePermanentAddress("gnDivision", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Father NIC</label>
+                <input
+                  type="text"
+                  value={familyReport.deceased.fatherNic || ""}
+                  onChange={(e) => updateDeceased("fatherNic", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Father Name</label>
+                <input
+                  type="text"
+                  value={familyReport.deceased.fatherName || ""}
+                  onChange={(e) => updateDeceased("fatherName", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Mother NIC</label>
+                <input
+                  type="text"
+                  value={familyReport.deceased.motherNic || ""}
+                  onChange={(e) => updateDeceased("motherNic", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Mother Name</label>
+                <input
+                  type="text"
+                  value={familyReport.deceased.motherName || ""}
+                  onChange={(e) => updateDeceased("motherName", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+            </div>
+          </section>
+
+          <section className="space-y-4 border-t border-gray-200 pt-4">
+            <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Death Details</h4>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Date of Death *</label>
+                <input
+                  type="date"
+                  value={familyReport.death.date}
+                  onChange={(e) => updateDeath("date", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Time of Death</label>
+                <input
+                  type="time"
+                  value={familyReport.death.time || ""}
+                  onChange={(e) => updateDeath("time", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Place of Death (Official Language)</label>
+                <input
+                  type="text"
+                  value={familyReport.death.placeOfficialLanguage || ""}
+                  onChange={(e) => updateDeath("placeOfficialLanguage", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Place of Death (English) *</label>
+                <input
+                  type="text"
+                  value={familyReport.death.placeEnglish}
+                  onChange={(e) => updateDeath("placeEnglish", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Place District *</label>
+                <input
+                  type="text"
+                  value={familyReport.death.placeDistrict}
+                  onChange={(e) => updateDeath("placeDistrict", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Place DS Division *</label>
+                <input
+                  type="text"
+                  value={familyReport.death.placeDsDivision}
+                  onChange={(e) => updateDeath("placeDsDivision", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Registration Division *</label>
+                <input
+                  type="text"
+                  value={familyReport.death.registrationDivision}
+                  onChange={(e) => updateDeath("registrationDivision", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Cause Known by Family</label>
+                <select
+                  value={familyReport.death.causeKnownByFamily == null ? "" : familyReport.death.causeKnownByFamily ? "yes" : "no"}
+                  onChange={(e) => updateDeath("causeKnownByFamily", e.target.value === "" ? null : e.target.value === "yes")}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                >
+                  <option value="">Select</option>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">Family Narrative</label>
+                <textarea
+                  value={familyReport.death.familyNarrative || ""}
+                  onChange={(e) => updateDeath("familyNarrative", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  rows={3}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">Burial or Cremation Place</label>
+                <input
+                  type="text"
+                  value={familyReport.death.burialOrCremationPlace || ""}
+                  onChange={(e) => updateDeath("burialOrCremationPlace", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  placeholder="Optional and non-blocking"
+                />
+              </div>
+            </div>
+          </section>
+
+          {showMaternal && (
+            <section className="space-y-4 border-t border-gray-200 pt-4">
+              <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Maternal Information</h4>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Pregnant at Death</label>
+                  <select
+                    value={familyReport.maternal.wasPregnantAtDeath == null ? "" : familyReport.maternal.wasPregnantAtDeath ? "yes" : "no"}
+                    onChange={(e) => updateMaternal("wasPregnantAtDeath", e.target.value === "" ? null : e.target.value === "yes")}
+                    className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  >
+                    <option value="">Select</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Gave Birth Within 42 Days</label>
+                  <select
+                    value={familyReport.maternal.gaveBirthWithin42Days == null ? "" : familyReport.maternal.gaveBirthWithin42Days ? "yes" : "no"}
+                    onChange={(e) => updateMaternal("gaveBirthWithin42Days", e.target.value === "" ? null : e.target.value === "yes")}
+                    className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  >
+                    <option value="">Select</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Had Abortion</label>
+                  <select
+                    value={familyReport.maternal.hadAbortion == null ? "" : familyReport.maternal.hadAbortion ? "yes" : "no"}
+                    onChange={(e) => updateMaternal("hadAbortion", e.target.value === "" ? null : e.target.value === "yes")}
+                    className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  >
+                    <option value="">Select</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Days Since Birth or Abortion</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={familyReport.maternal.daysSinceBirthOrAbortion ?? ""}
+                    onChange={(e) => updateMaternal("daysSinceBirthOrAbortion", numberOrNull(e.target.value))}
+                    className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  />
+                </div>
+              </div>
+            </section>
+          )}
+
+          <section className="space-y-4 border-t border-gray-200 pt-4">
+            <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Informant Information</h4>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Relationship *</label>
+                <select
+                  value={familyReport.informant.capacity}
+                  onChange={(e) => updateInformant("capacity", e.target.value as CanonicalFamilyReport["informant"]["capacity"])}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                >
+                  <option value="HUSBAND_WIFE">Husband / Wife</option>
+                  <option value="FATHER_MOTHER">Father / Mother</option>
+                  <option value="SON_DAUGHTER">Son / Daughter</option>
+                  <option value="BROTHER_SISTER">Brother / Sister</option>
+                  <option value="RELATIVE">Relative</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </div>
+              {familyReport.informant.capacity === "OTHER" && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Describe Relationship *</label>
+                  <input
+                    type="text"
+                    value={familyReport.informant.otherCapacityText || ""}
+                    onChange={(e) => updateInformant("otherCapacityText", e.target.value)}
+                    className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  />
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Informant NIC or Passport *</label>
+                <input
+                  type="text"
+                  value={familyReport.informant.nicOrPassport}
+                  onChange={(e) => updateInformant("nicOrPassport", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Informant Full Name *</label>
+                <input
+                  type="text"
+                  value={familyReport.informant.fullName}
+                  onChange={(e) => updateInformant("fullName", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">Postal Address *</label>
+                <textarea
+                  value={familyReport.informant.postalAddress}
+                  onChange={(e) => updateInformant("postalAddress", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  rows={2}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Mobile *</label>
+                <input
+                  type="tel"
+                  value={familyReport.informant.mobile}
+                  onChange={(e) => updateInformant("mobile", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Landline</label>
+                <input
+                  type="tel"
+                  value={familyReport.informant.landline || ""}
+                  onChange={(e) => updateInformant("landline", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Email</label>
+                <input
+                  type="email"
+                  value={familyReport.informant.email || ""}
+                  onChange={(e) => updateInformant("email", e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                />
+              </div>
+            </div>
+          </section>
+
+          <section className="space-y-4 border-t border-gray-200 pt-4">
+            <label className="flex items-start gap-3 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={familyReport.declarationConfirmed}
+                onChange={(e) => updateReport("declarationConfirmed", e.target.checked)}
+                className="mt-1"
+              />
+              <span>I confirm that this information is true and will be used as the canonical source for the later registration workflow.</span>
+            </label>
+          </section>
+
+          <div className="flex gap-3">
+            <button type="submit" disabled={submittingCase} className="rounded bg-blue-600 px-5 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-60">
+              {submittingCase ? "Submitting..." : "Submit Report"}
+            </button>
+            <button type="button" onClick={() => setShowCreateForm(false)} className="rounded bg-gray-200 px-5 py-2 font-medium text-gray-800 hover:bg-gray-300">
+              Cancel
+            </button>
           </div>
         </form>
       )}
 
       {!showCreateForm && cases.length === 0 && (
-        <div className="text-center py-10 bg-gray-50 rounded-lg border border-dashed border-gray-300 text-gray-500">
-          No active cases found. Click &quot;Report a Death&quot; to start the process.
+        <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 py-12 text-center text-gray-500">
+          No active cases found. Click "Report a Death" to start the process.
         </div>
       )}
 
-      {!showCreateForm && cases.map(c => (
-        <div key={c.caseId} className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <h3 className="text-lg font-bold text-gray-900">{c.deceasedFullName}</h3>
-              <p className="text-sm text-gray-500">NIC: {c.deceasedNic} • Case #{c.caseId}</p>
-            </div>
-            <span className="bg-blue-100 text-blue-800 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
-              {c.status.replace(/_/g, " ")}
-            </span>
-          </div>
+      {!showCreateForm && (
+        <section className="space-y-4">
+          {cases.map((caseItem) => (
+            <div key={caseItem.caseId} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition hover:shadow-md">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-lg font-bold text-gray-900">{caseItem.deceasedFullName}</h3>
+                    <span className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wider ${getStatusTone(caseItem.status)}`}>
+                      {caseItem.status.replace(/_/g, " ")}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-500">NIC: {caseItem.deceasedNic || "Not provided"} | Case #{caseItem.caseId}</p>
+                </div>
 
-          {c.status === "PENDING_CR2_FAMILY" && (
-            <div className="mt-4 p-4 border border-blue-200 bg-blue-50 rounded-md">
-              <p className="text-sm text-blue-800 mb-3 font-medium">
-                The Grama Niladhari has verified this case. Please fill out the CR-2 Death Declaration form to proceed to the Registrar.
-              </p>
-              <button 
-                onClick={() => handleOpenCr2Form(c.caseId)}
-                disabled={cr2Loading}
-                className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50"
-              >
-                {cr2Loading ? "Loading Form..." : "Fill CR-2 Declaration Form"}
-              </button>
-            </div>
-          )}
+                <div className="flex flex-wrap gap-3">
+                  {caseItem.status === "CR2_ISSUED_CLOSED" && (
+                    <>
+                      <button
+                        onClick={() => void handleOpenCr2View(caseItem.caseId)}
+                        disabled={cr2LoadingCaseId === caseItem.caseId}
+                        className="rounded-xl bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-green-700 disabled:opacity-60"
+                      >
+                        {cr2LoadingCaseId === caseItem.caseId ? "Loading..." : "View CR-02"}
+                      </button>
+                      <button
+                        onClick={() => goToCemeteryBooking(caseItem.caseId)}
+                        className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-800 transition hover:border-blue-300 hover:bg-blue-100"
+                      >
+                        Cemetery Booking
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
 
-          {c.status === "REJECTED_UNNATURAL_DEATH" && (
-            <div className="mt-4 p-4 border border-red-300 bg-red-50 rounded-md shadow-sm">
-              <h4 className="font-bold text-red-900 text-lg flex items-center gap-2">
-                ⚠️ Case Rejected: Medical Officer Review
-              </h4>
-              <p className="text-sm text-red-800 mt-2 font-medium">
-                The certifying Medical Officer has officially logged this case as an unnatural death. 
-                The standard death registration process cannot continue. 
-                <br /><br />
-                <strong>REQUIRED ACTION:</strong> Please report this immediately to your local Police Station for further investigation.
-              </p>
+              {caseItem.status === "PENDING_GN_REVIEW" && (
+                <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+                  Your case has been submitted and is awaiting review by the Grama Niladhari officer in your sector.
+                </div>
+              )}
+
+              {caseItem.status === "PENDING_DOCTOR_ASSIGNMENT" && (
+                <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4">
+                  <h4 className="font-semibold text-amber-900">Action Required: Provide a Doctor</h4>
+                  <p className="mt-2 text-sm text-amber-800">
+                    The Grama Niladhari has requested a medical confirmation for this case, but no doctor was assigned during case creation.
+                    Please provide the doctor&apos;s system ID below.
+                  </p>
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <input
+                      type="text"
+                      placeholder="e.g. DOC-A1B2C3"
+                      value={doctorIdInputs[caseItem.caseId] || ""}
+                      onChange={(e) => setDoctorIdInputs((prev) => ({ ...prev, [caseItem.caseId]: e.target.value }))}
+                      className="block rounded-md border border-amber-300 bg-white p-2 text-sm font-mono shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:w-56"
+                    />
+                    <button
+                      onClick={() => void handleAssignDoctor(caseItem.caseId)}
+                      disabled={assigningDoctor === caseItem.caseId}
+                      className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-amber-700 disabled:opacity-50"
+                    >
+                      {assigningDoctor === caseItem.caseId ? "Assigning..." : "Assign Doctor"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {caseItem.status === "PENDING_B12_MEDICAL" && (
+                <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+                  Awaiting medical confirmation from the assigned doctor.
+                </div>
+              )}
+
+              {caseItem.status === "PENDING_REGISTRAR_REVIEW" && (
+                <div className="mt-4 rounded-xl border border-purple-200 bg-purple-50 p-4 text-sm text-purple-800">
+                  All verifications are complete. Your case is now with the Registrar for final CR-2 certificate issuance.
+                </div>
+              )}
+
+              {caseItem.status === "REJECTED_UNNATURAL_DEATH" && (
+                <div className="mt-4 rounded-xl border border-red-300 bg-red-50 p-4 shadow-sm">
+                  <h4 className="text-lg font-bold text-red-900">Case Rejected: Unnatural Death</h4>
+                  <p className="mt-2 text-sm font-medium text-red-800">
+                    The certifying Medical Officer has logged this case as an unnatural death. The standard death registration process cannot continue.
+                    <br />
+                    <br />
+                    <strong>Required action:</strong> Please report this immediately to your local police station for further investigation.
+                  </p>
+                </div>
+              )}
             </div>
-          )}
-          
-          {c.status === "CR2_ISSUED_CLOSED" && c.formCr2 && (
-            <div className="mt-4 p-4 border border-green-200 bg-green-50 rounded-md text-green-800">
-              <p className="font-bold flex items-center gap-2">
-                ✅ Final Death Certificate (CR-2) Issued!
-              </p>
-              <p className="text-sm mt-1">Serial Number: <span className="font-mono bg-white px-2 py-0.5 rounded border border-green-300">{c.formCr2.certificateSerialNumber}</span></p>
-            </div>
-          )}
-        </div>
-      ))}
+          ))}
+        </section>
+      )}
     </div>
   );
 }

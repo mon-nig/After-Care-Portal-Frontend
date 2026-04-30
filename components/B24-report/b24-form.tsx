@@ -20,6 +20,13 @@ export interface B24FormProps {
 export function B24Form({ initialData, isVerificationFlow, onVerificationSubmit, onCancel }: B24FormProps = {}) {
   const [formData, setFormData] = useState<Record<string, string>>(initialData || {})
   const [submitted, setSubmitted] = useState(false)
+
+  // Sync formData when initialData changes (e.g. GN Dashboard pre-fill)
+  useEffect(() => {
+    if (initialData && Object.keys(initialData).length > 0) {
+      setFormData((prev) => ({ ...prev, ...initialData }))
+    }
+  }, [initialData])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [registrars, setRegistrars] = useState<{username: string; fullName: string}[]>([])
@@ -234,7 +241,7 @@ export function B24Form({ initialData, isVerificationFlow, onVerificationSubmit,
           className="sm:flex-1"
           disabled={formData.b24Confirmed !== "true" || isSubmitting}
         >
-          {isSubmitting ? "Submitting Report..." : "Submit Report"}
+          {isSubmitting ? "Submitting Report..." : (isVerificationFlow ? "Submit Form & Forward to Registrar" : "Submit Report")}
         </Button>
       </div>
 
