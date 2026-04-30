@@ -195,7 +195,14 @@ async function authFetch<T = any>(url: string, options: RequestInit, token: stri
     const errData = await res.json().catch(() => ({}));
     throw new Error(errData.message || `API Error: ${res.statusText}`);
   }
-  return res.json();
+
+  // Handle empty response (common with DELETE/204 No Content)
+  if (res.status === 204 || res.headers.get("content-length") === "0") {
+    return {} as T;
+  }
+
+  const text = await res.text();
+  return text ? JSON.parse(text) : ({} as T);
 }
 
 export async function createCase(data: CreateCasePayload, token: string | null) {
@@ -208,6 +215,10 @@ export async function createCase(data: CreateCasePayload, token: string | null) 
     },
     token,
   );
+}
+
+export async function deleteCase(caseId: number, token: string | null) {
+  return authFetch(`${CASES_URL}/${caseId}`, { method: "DELETE" }, token);
 }
 
 export async function getMyCases(token: string | null) {
