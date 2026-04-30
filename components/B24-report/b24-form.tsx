@@ -186,6 +186,8 @@ export function B24Form({ initialData, isVerificationFlow, onVerificationSubmit,
               placeholder="e.g., 200012345678"
               disabled={isSubmitting}
               className="block w-full max-w-sm rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+              pattern="^([0-9]{9}[vV]|[0-9]{12})$"
+              title="Please enter a valid NIC (e.g., 123456789V or 12 digits)"
               required
             />
             <p className="text-xs text-gray-500 mt-1">Enter the NIC of the registered family member to allow them to track this form.</p>
