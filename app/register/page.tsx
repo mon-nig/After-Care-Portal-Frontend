@@ -163,6 +163,8 @@ export default function RegisterPage() {
                 disabled={isLoading}
                 className="block w-full rounded-xl border-0 py-3 px-4 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-200 bg-gray-50 placeholder:text-gray-400 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-[#4a7c9f] disabled:opacity-50 sm:text-sm transition-all"
                 placeholder="e.g., 200012345678"
+                pattern="^([0-9]{9}[vV]|[0-9]{12})$"
+                title="Please enter a valid NIC (e.g., 123456789V or 12 digits)"
                 required
               />
               <p className="text-xs text-gray-500 mt-1">Your NIC is used to link death certificates and track form submissions.</p>

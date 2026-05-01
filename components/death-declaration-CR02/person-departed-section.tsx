@@ -55,6 +55,8 @@ export function PersonDepartedSection({ formData, onChange }: PersonDepartedSect
           value={formData.deceasedNic || ""}
           onChange={(e) => onChange("deceasedNic", e.target.value)}
           className="max-w-sm"
+          pattern="^([0-9]{9}[vV]|[0-9]{12})$"
+          title="Please enter a valid NIC (e.g., 123456789V or 12 digits)"
         />
       </div>
 
@@ -323,6 +325,8 @@ export function PersonDepartedSection({ formData, onChange }: PersonDepartedSect
               name="fatherNic"
               value={formData.fatherNic || ""}
               onChange={(e) => onChange("fatherNic", e.target.value)}
+              pattern="^([0-9]{9}[vV]|[0-9]{12})$"
+              title="Invalid NIC format"
             />
           </div>
           <div className="space-y-2">
@@ -351,6 +355,8 @@ export function PersonDepartedSection({ formData, onChange }: PersonDepartedSect
               name="motherNic"
               value={formData.motherNic || ""}
               onChange={(e) => onChange("motherNic", e.target.value)}
+              pattern="^([0-9]{9}[vV]|[0-9]{12})$"
+              title="Invalid NIC format"
             />
           </div>
           <div className="space-y-2">

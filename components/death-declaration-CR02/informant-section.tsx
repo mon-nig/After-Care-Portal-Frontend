@@ -94,6 +94,8 @@ export function InformantSection({ formData, onChange }: InformantSectionProps) 
           value={formData.informantId || ""}
           onChange={(e) => onChange("informantId", e.target.value)}
           className="max-w-sm"
+          pattern="^([0-9]{9}[vV]|[0-9]{12}|.+)$"
+          title="Please enter a valid NIC or Passport number"
         />
       </div>
 

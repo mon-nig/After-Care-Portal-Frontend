@@ -3,30 +3,53 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../contexts/auth-context";
-import { assignDoctor, createCase, getCaseDetail, getMyCases, type CaseDetailResponse, type CaseListItem } from "../../lib/api";
-import { canonicalFamilyReportSchema, computeAgeAtDeath, createInitialFamilyReport, type CanonicalFamilyReport } from "../../lib/death-report-schema";
+import { assignDoctor, createCase, deleteCase, getCaseDetail, getMyCases, type CaseDetailResponse, type CaseListItem } from "../../lib/api";
+import { DeathReportModel, canonicalFamilyReportSchema, computeAgeAtDeath, createInitialFamilyReport, formatZodError, type CanonicalFamilyReport } from "../../lib/death-report-schema";
 import { caseDetailToPrefill } from "../../lib/mappers/caseDetailToPrefill";
 import { DeathDeclarationForm } from "../death-declaration-CR02/death-declaration-form";
 import { useToast } from "../../hooks/use-toast";
 
-function buildCr02FileName(deceasedName: string | undefined, caseId: number) {
-  const safeName = (deceasedName || `case-${caseId}`)
-    .replace(/[^a-z0-9]+/gi, "-")
-    .replace(/^-+|-+$/g, "")
-    .toLowerCase();
+/**
+ * DashboardUIHelper encapsulates UI-related transformation logic.
+ * Demonstrates: Encapsulation & Static Utility Pattern.
+ */
+class DashboardUIHelper {
+  public static buildCr02FileName(deceasedName: string | undefined, caseId: number): string {
+    const safeName = (deceasedName || `case-${caseId}`)
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-+|-+$/g, "")
+      .toLowerCase();
+    return `${safeName || `case-${caseId}`}-cr02.pdf`;
+  }
 
-  return `${safeName || `case-${caseId}`}-cr02.pdf`;
-}
+  public static getStatusTone(status: string): string {
+    const tones: Record<string, string> = {
+      CR2_ISSUED_CLOSED: "bg-green-100 text-green-800 border-green-200",
+      PENDING_DOCTOR_ASSIGNMENT: "bg-amber-100 text-amber-800 border-amber-200",
+      REJECTED_UNNATURAL_DEATH: "bg-red-100 text-red-800 border-red-200",
+    };
+    return tones[status] || "bg-blue-100 text-blue-800 border-blue-200";
+  }
 
-function getStatusTone(status: string) {
-  if (status === "CR2_ISSUED_CLOSED") return "bg-green-100 text-green-800 border-green-200";
-  if (status === "PENDING_DOCTOR_ASSIGNMENT") return "bg-amber-100 text-amber-800 border-amber-200";
-  if (status === "REJECTED_UNNATURAL_DEATH") return "bg-red-100 text-red-800 border-red-200";
-  return "bg-blue-100 text-blue-800 border-blue-200";
-}
+  public static numberOrNull(value: string): number | null {
+    return value.trim() === "" ? null : Number(value);
+  }
 
-function numberOrNull(value: string) {
-  return value.trim() === "" ? null : Number(value);
+  /**
+   * Smoothly scrolls to the element with the given ID and focuses it.
+   * Demonstrates: UI Interaction logic encapsulated in Helper.
+   */
+  public static scrollToError(path: string | undefined): void {
+    if (!path) return;
+    // Map Zod path (e.g. deceased.nic) to DOM ID (e.g. deceased.nic)
+    const element = document.getElementById(path);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (element.tagName === "INPUT" || element.tagName === "SELECT" || element.tagName === "TEXTAREA") {
+        (element as HTMLElement).focus();
+      }
+    }
+  }
 }
 
 export function FamilyDashboard() {
@@ -90,45 +113,25 @@ export function FamilyDashboard() {
     e.preventDefault();
     setSubmittingCase(true);
 
-    const parsed = canonicalFamilyReportSchema.safeParse({
+    // --- OOP Integration ---
+    // Instead of raw validation, we encapsulate the report in a Domain Model.
+    // This demonstrates Abstraction (hiding Zod logic) and Domain-Driven Design.
+    const reportModel = DeathReportModel.fromData({
       ...familyReport,
       doctorId: familyReport.doctorId?.trim() || null,
-      deceased: {
-        ...familyReport.deceased,
-        nic: familyReport.deceased.nic?.trim() || null,
-        passportCountry: familyReport.deceased.passportCountry?.trim() || null,
-        passportNumber: familyReport.deceased.passportNumber?.trim() || null,
-        fullNameOfficialLanguage: familyReport.deceased.fullNameOfficialLanguage?.trim() || null,
-        race: familyReport.deceased.race?.trim() || null,
-        profession: familyReport.deceased.profession?.trim() || null,
-        fatherNic: familyReport.deceased.fatherNic?.trim() || null,
-        fatherName: familyReport.deceased.fatherName?.trim() || null,
-        motherNic: familyReport.deceased.motherNic?.trim() || null,
-        motherName: familyReport.deceased.motherName?.trim() || null,
-      },
-      death: {
-        ...familyReport.death,
-        time: familyReport.death.time?.trim() || null,
-        placeOfficialLanguage: familyReport.death.placeOfficialLanguage?.trim() || null,
-        familyNarrative: familyReport.death.familyNarrative?.trim() || null,
-        burialOrCremationPlace: familyReport.death.burialOrCremationPlace?.trim() || null,
-      },
-      maternal: {
-        ...familyReport.maternal,
-      },
-      informant: {
-        ...familyReport.informant,
-        otherCapacityText: familyReport.informant.otherCapacityText?.trim() || null,
-        landline: familyReport.informant.landline?.trim() || null,
-        email: familyReport.informant.email?.trim() || null,
-      },
     });
 
-    if (!parsed.success) {
-      const issue = parsed.error.issues[0];
+    const validation = reportModel.validate();
+
+    if (!validation.success && validation.errors && validation.errors.length > 0) {
+      const immediateError = validation.errors[0];
+      
+      // Focus the field that caused the error
+      DashboardUIHelper.scrollToError(validation.firstErrorPath);
+
       toast({
-        title: "Validation Error",
-        description: issue?.message || "Please complete the required fields.",
+        title: "Incomplete Form",
+        description: immediateError,
         variant: "destructive",
       });
       setSubmittingCase(false);
@@ -136,7 +139,9 @@ export function FamilyDashboard() {
     }
 
     try {
-      await createCase({ familyReport: parsed.data }, token);
+      // In OOP, we would use parsed.data, but since we are wrapping Zod, 
+      // we use the reportData from the model.
+      await createCase({ familyReport: reportModel.reportData }, token);
       setShowCreateForm(false);
       setFamilyReport(createInitialFamilyReport());
       await fetchCases();
@@ -153,6 +158,27 @@ export function FamilyDashboard() {
       });
     } finally {
       setSubmittingCase(false);
+    }
+  };
+
+  const handleDeleteCase = async (caseId: number) => {
+    if (!confirm("Are you sure you want to delete this case? This action cannot be undone.")) {
+      return;
+    }
+
+    try {
+      await deleteCase(caseId, token);
+      toast({
+        title: "Case Deleted",
+        description: "The case has been successfully removed.",
+      });
+      await fetchCases();
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to delete case.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -287,7 +313,7 @@ export function FamilyDashboard() {
             setCr2CaseId(null);
             setCr2CaseDetails(null);
           }}
-          pdfFileName={buildCr02FileName(cr2CaseDetails.deceasedFullName, cr2CaseId)}
+          pdfFileName={DashboardUIHelper.buildCr02FileName(cr2CaseDetails.deceasedFullName, cr2CaseId)}
         />
       </div>
     );
@@ -372,8 +398,9 @@ export function FamilyDashboard() {
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Sector Code *</label>
+                <label className="block text-sm font-medium text-gray-700">Sector Code <span className="text-red-500">*</span></label>
                 <input
+                  id="sectorCode"
                   type="text"
                   value={familyReport.sectorCode}
                   onChange={(e) => updateReport("sectorCode", e.target.value)}
@@ -397,8 +424,9 @@ export function FamilyDashboard() {
             <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Deceased Information</h4>
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Identification Status *</label>
+                <label className="block text-sm font-medium text-gray-700">Identification Status <span className="text-red-500">*</span></label>
                 <select
+                  id="deceased.identificationStatus"
                   value={familyReport.deceased.identificationStatus}
                   onChange={(e) => updateDeceased("identificationStatus", e.target.value as CanonicalFamilyReport["deceased"]["identificationStatus"])}
                   className="mt-1 block w-full rounded-md border border-gray-300 p-2"
@@ -410,12 +438,15 @@ export function FamilyDashboard() {
               </div>
               {familyReport.deceased.identificationStatus === "IDENTIFIED_SRI_LANKAN" && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">NIC *</label>
+                  <label className="block text-sm font-medium text-gray-700">NIC <span className="text-red-500">*</span></label>
                   <input
+                    id="deceased.nic"
                     type="text"
                     value={familyReport.deceased.nic || ""}
                     onChange={(e) => updateDeceased("nic", e.target.value)}
                     className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                    pattern="^([0-9]{9}[vV]|[0-9]{12})$"
+                    title="Please enter a valid NIC (e.g., 123456789V or 12 digits)"
                   />
                 </div>
               )}
@@ -451,8 +482,9 @@ export function FamilyDashboard() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Full Name (English) *</label>
+                <label className="block text-sm font-medium text-gray-700">Full Name (English) <span className="text-red-500">*</span></label>
                 <input
+                  id="deceased.fullNameEnglish"
                   type="text"
                   value={familyReport.deceased.fullNameEnglish}
                   onChange={(e) => updateDeceased("fullNameEnglish", e.target.value)}
@@ -462,6 +494,7 @@ export function FamilyDashboard() {
               <div>
                 <label className="block text-sm font-medium text-gray-700">Date of Birth</label>
                 <input
+                  id="deceased.dateOfBirth"
                   type="date"
                   value={familyReport.deceased.dateOfBirth || ""}
                   onChange={(e) => updateDeceased("dateOfBirth", e.target.value)}
@@ -472,39 +505,43 @@ export function FamilyDashboard() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Age Years</label>
                   <input
+                    id="deceased.ageYears"
                     type="number"
                     min={0}
                     value={familyReport.deceased.ageYears ?? ""}
-                    onChange={(e) => updateDeceased("ageYears", numberOrNull(e.target.value))}
+                    onChange={(e) => updateDeceased("ageYears", DashboardUIHelper.numberOrNull(e.target.value))}
                     className="mt-1 block w-full rounded-md border border-gray-300 p-2"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Age Months</label>
                   <input
+                    id="deceased.ageMonths"
                     type="number"
                     min={0}
                     max={11}
                     value={familyReport.deceased.ageMonths ?? ""}
-                    onChange={(e) => updateDeceased("ageMonths", numberOrNull(e.target.value))}
+                    onChange={(e) => updateDeceased("ageMonths", DashboardUIHelper.numberOrNull(e.target.value))}
                     className="mt-1 block w-full rounded-md border border-gray-300 p-2"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Age Days</label>
                   <input
+                    id="deceased.ageDays"
                     type="number"
                     min={0}
                     max={31}
                     value={familyReport.deceased.ageDays ?? ""}
-                    onChange={(e) => updateDeceased("ageDays", numberOrNull(e.target.value))}
+                    onChange={(e) => updateDeceased("ageDays", DashboardUIHelper.numberOrNull(e.target.value))}
                     className="mt-1 block w-full rounded-md border border-gray-300 p-2"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Nationality *</label>
+                <label className="block text-sm font-medium text-gray-700">Nationality <span className="text-red-500">*</span></label>
                 <input
+                  id="deceased.nationality"
                   type="text"
                   value={familyReport.deceased.nationality}
                   onChange={(e) => updateDeceased("nationality", e.target.value)}
@@ -512,8 +549,9 @@ export function FamilyDashboard() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Gender *</label>
+                <label className="block text-sm font-medium text-gray-700">Gender <span className="text-red-500">*</span></label>
                 <select
+                  id="deceased.gender"
                   value={familyReport.deceased.gender}
                   onChange={(e) => updateDeceased("gender", e.target.value as CanonicalFamilyReport["deceased"]["gender"])}
                   className="mt-1 block w-full rounded-md border border-gray-300 p-2"
@@ -558,8 +596,9 @@ export function FamilyDashboard() {
                 </select>
               </div>
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">Permanent Address *</label>
+                <label className="block text-sm font-medium text-gray-700">Permanent Address <span className="text-red-500">*</span></label>
                 <textarea
+                  id="deceased.permanentAddress.fullText"
                   value={familyReport.deceased.permanentAddress.fullText}
                   onChange={(e) => updatePermanentAddress("fullText", e.target.value)}
                   className="mt-1 block w-full rounded-md border border-gray-300 p-2"
@@ -567,8 +606,9 @@ export function FamilyDashboard() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Permanent District *</label>
+                <label className="block text-sm font-medium text-gray-700">Permanent District <span className="text-red-500">*</span></label>
                 <input
+                  id="deceased.permanentAddress.district"
                   type="text"
                   value={familyReport.deceased.permanentAddress.district}
                   onChange={(e) => updatePermanentAddress("district", e.target.value)}
@@ -576,8 +616,9 @@ export function FamilyDashboard() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Permanent DS Division *</label>
+                <label className="block text-sm font-medium text-gray-700">Permanent DS Division <span className="text-red-500">*</span></label>
                 <input
+                  id="deceased.permanentAddress.dsDivision"
                   type="text"
                   value={familyReport.deceased.permanentAddress.dsDivision}
                   onChange={(e) => updatePermanentAddress("dsDivision", e.target.value)}
@@ -585,8 +626,9 @@ export function FamilyDashboard() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Permanent GN Division *</label>
+                <label className="block text-sm font-medium text-gray-700">Permanent GN Division <span className="text-red-500">*</span></label>
                 <input
+                  id="deceased.permanentAddress.gnDivision"
                   type="text"
                   value={familyReport.deceased.permanentAddress.gnDivision}
                   onChange={(e) => updatePermanentAddress("gnDivision", e.target.value)}
@@ -600,6 +642,8 @@ export function FamilyDashboard() {
                   value={familyReport.deceased.fatherNic || ""}
                   onChange={(e) => updateDeceased("fatherNic", e.target.value)}
                   className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  pattern="^([0-9]{9}[vV]|[0-9]{12})$"
+                  title="Invalid NIC format"
                 />
               </div>
               <div>
@@ -618,6 +662,8 @@ export function FamilyDashboard() {
                   value={familyReport.deceased.motherNic || ""}
                   onChange={(e) => updateDeceased("motherNic", e.target.value)}
                   className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  pattern="^([0-9]{9}[vV]|[0-9]{12})$"
+                  title="Invalid NIC format"
                 />
               </div>
               <div>
@@ -636,8 +682,9 @@ export function FamilyDashboard() {
             <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Death Details</h4>
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Date of Death *</label>
+                <label className="block text-sm font-medium text-gray-700">Date of Death <span className="text-red-500">*</span></label>
                 <input
+                  id="death.date"
                   type="date"
                   value={familyReport.death.date}
                   onChange={(e) => updateDeath("date", e.target.value)}
@@ -663,8 +710,9 @@ export function FamilyDashboard() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Place of Death (English) *</label>
+                <label className="block text-sm font-medium text-gray-700">Place of Death (English) <span className="text-red-500">*</span></label>
                 <input
+                  id="death.placeEnglish"
                   type="text"
                   value={familyReport.death.placeEnglish}
                   onChange={(e) => updateDeath("placeEnglish", e.target.value)}
@@ -672,8 +720,9 @@ export function FamilyDashboard() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Place District *</label>
+                <label className="block text-sm font-medium text-gray-700">Place District <span className="text-red-500">*</span></label>
                 <input
+                  id="death.placeDistrict"
                   type="text"
                   value={familyReport.death.placeDistrict}
                   onChange={(e) => updateDeath("placeDistrict", e.target.value)}
@@ -681,8 +730,9 @@ export function FamilyDashboard() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Place DS Division *</label>
+                <label className="block text-sm font-medium text-gray-700">Place DS Division <span className="text-red-500">*</span></label>
                 <input
+                  id="death.placeDsDivision"
                   type="text"
                   value={familyReport.death.placeDsDivision}
                   onChange={(e) => updateDeath("placeDsDivision", e.target.value)}
@@ -690,8 +740,9 @@ export function FamilyDashboard() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Registration Division *</label>
+                <label className="block text-sm font-medium text-gray-700">Registration Division <span className="text-red-500">*</span></label>
                 <input
+                  id="death.registrationDivision"
                   type="text"
                   value={familyReport.death.registrationDivision}
                   onChange={(e) => updateDeath("registrationDivision", e.target.value)}
@@ -778,7 +829,7 @@ export function FamilyDashboard() {
                     type="number"
                     min={0}
                     value={familyReport.maternal.daysSinceBirthOrAbortion ?? ""}
-                    onChange={(e) => updateMaternal("daysSinceBirthOrAbortion", numberOrNull(e.target.value))}
+                    onChange={(e) => updateMaternal("daysSinceBirthOrAbortion", DashboardUIHelper.numberOrNull(e.target.value))}
                     className="mt-1 block w-full rounded-md border border-gray-300 p-2"
                   />
                 </div>
@@ -790,8 +841,9 @@ export function FamilyDashboard() {
             <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Informant Information</h4>
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Relationship *</label>
+                <label className="block text-sm font-medium text-gray-700">Relationship <span className="text-red-500">*</span></label>
                 <select
+                  id="informant.capacity"
                   value={familyReport.informant.capacity}
                   onChange={(e) => updateInformant("capacity", e.target.value as CanonicalFamilyReport["informant"]["capacity"])}
                   className="mt-1 block w-full rounded-md border border-gray-300 p-2"
@@ -806,8 +858,9 @@ export function FamilyDashboard() {
               </div>
               {familyReport.informant.capacity === "OTHER" && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Describe Relationship *</label>
+                  <label className="block text-sm font-medium text-gray-700">Describe Relationship <span className="text-red-500">*</span></label>
                   <input
+                    id="informant.otherCapacityText"
                     type="text"
                     value={familyReport.informant.otherCapacityText || ""}
                     onChange={(e) => updateInformant("otherCapacityText", e.target.value)}
@@ -816,17 +869,21 @@ export function FamilyDashboard() {
                 </div>
               )}
               <div>
-                <label className="block text-sm font-medium text-gray-700">Informant NIC or Passport *</label>
+                <label className="block text-sm font-medium text-gray-700">Informant NIC or Passport <span className="text-red-500">*</span></label>
                 <input
+                  id="informant.nicOrPassport"
                   type="text"
                   value={familyReport.informant.nicOrPassport}
                   onChange={(e) => updateInformant("nicOrPassport", e.target.value)}
                   className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  pattern="^([0-9]{9}[vV]|[0-9]{12}|.+)$"
+                  title="Please enter a valid NIC or Passport number"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Informant Full Name *</label>
+                <label className="block text-sm font-medium text-gray-700">Informant Full Name <span className="text-red-500">*</span></label>
                 <input
+                  id="informant.fullName"
                   type="text"
                   value={familyReport.informant.fullName}
                   onChange={(e) => updateInformant("fullName", e.target.value)}
@@ -834,8 +891,9 @@ export function FamilyDashboard() {
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">Postal Address *</label>
+                <label className="block text-sm font-medium text-gray-700">Postal Address <span className="text-red-500">*</span></label>
                 <textarea
+                  id="informant.postalAddress"
                   value={familyReport.informant.postalAddress}
                   onChange={(e) => updateInformant("postalAddress", e.target.value)}
                   className="mt-1 block w-full rounded-md border border-gray-300 p-2"
@@ -843,21 +901,28 @@ export function FamilyDashboard() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Mobile *</label>
+                <label className="block text-sm font-medium text-gray-700">Mobile <span className="text-red-500">*</span></label>
                 <input
+                  id="informant.mobile"
                   type="tel"
                   value={familyReport.informant.mobile}
-                  onChange={(e) => updateInformant("mobile", e.target.value)}
+                  onChange={(e) => updateInformant("mobile", e.target.value.replace(/[^\d+]/g, ""))}
+                  placeholder="+947XXXXXXXX"
                   className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  pattern="^\+947\d{8}$"
+                  title="Mobile must be in format +947 followed by 8 digits"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Landline</label>
                 <input
+                  id="informant.landline"
                   type="tel"
                   value={familyReport.informant.landline || ""}
-                  onChange={(e) => updateInformant("landline", e.target.value)}
+                  onChange={(e) => updateInformant("landline", e.target.value.replace(/\D/g, ""))}
                   className="mt-1 block w-full rounded-md border border-gray-300 p-2"
+                  pattern="^\d{10}$"
+                  title="Landline must be exactly 10 digits"
                 />
               </div>
               <div>
@@ -875,6 +940,7 @@ export function FamilyDashboard() {
           <section className="space-y-4 border-t border-gray-200 pt-4">
             <label className="flex items-start gap-3 text-sm text-gray-700">
               <input
+                id="declarationConfirmed"
                 type="checkbox"
                 checked={familyReport.declarationConfirmed}
                 onChange={(e) => updateReport("declarationConfirmed", e.target.checked)}
@@ -909,7 +975,7 @@ export function FamilyDashboard() {
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-lg font-bold text-gray-900">{caseItem.deceasedFullName}</h3>
-                    <span className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wider ${getStatusTone(caseItem.status)}`}>
+                    <span className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wider ${DashboardUIHelper.getStatusTone(caseItem.status)}`}>
                       {caseItem.status.replace(/_/g, " ")}
                     </span>
                   </div>
@@ -933,6 +999,14 @@ export function FamilyDashboard() {
                         Cemetery Booking
                       </button>
                     </>
+                  )}
+                  {caseItem.status !== "CR2_ISSUED_CLOSED" && (
+                    <button
+                      onClick={() => void handleDeleteCase(caseItem.caseId)}
+                      className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 transition hover:border-red-300 hover:bg-red-100"
+                    >
+                      Delete Case
+                    </button>
                   )}
                 </div>
               </div>
