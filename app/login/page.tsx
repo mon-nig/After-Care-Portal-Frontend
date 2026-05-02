@@ -36,6 +36,9 @@ export default function LoginPage() {
         setCurrentDoctorId(data.doctorId || null);
         setToken(data.token || null);
         router.push("/");
+      } else if (data.requiresOtp) {
+        // Account registered but OTP never verified — redirect to verification
+        router.push(`/verify-otp?username=${encodeURIComponent(data.username)}`);
       } else {
         setError(data.message || "Invalid username or password");
       }
@@ -121,7 +124,13 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 text-center text-sm text-gray-600">
+          <div className="mt-4 text-center">
+            <a href="/forgot-password" className="text-sm text-gray-400 hover:text-gray-600 underline">
+              Forgot your password?
+            </a>
+          </div>
+
+          <div className="mt-4 text-center text-sm text-gray-600">
             Don't have an account?{" "}
             <a href="/register" className="font-bold text-[#4a7c9f] hover:text-[#3b6787] underline">
               Register here

@@ -226,6 +226,13 @@ export default function Page() {
               <div className="rounded-2xl border border-white/10 bg-white/95 p-1 shadow-lg shadow-slate-950/20">
                 <NotificationBell />
               </div>
+              <a
+                href="/profile"
+                className="inline-flex items-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-sky-300"
+              >
+                <User className="h-4 w-4" />
+                Account
+              </a>
               <button
                 onClick={handleLogout}
                 className="inline-flex items-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-sky-300"

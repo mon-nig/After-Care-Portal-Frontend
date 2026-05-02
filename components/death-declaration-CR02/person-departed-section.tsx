@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -10,6 +11,44 @@ interface PersonDepartedSectionProps {
 }
 
 export function PersonDepartedSection({ formData, onChange }: PersonDepartedSectionProps) {
+  const [nicLookupStatus, setNicLookupStatus] = useState<"idle" | "loading" | "found" | "not-found">("idle")
+
+  const handleNicBlur = async (nic: string) => {
+    if (!nic || nic.trim().length < 9) return
+    setNicLookupStatus("loading")
+    try {
+      const token = localStorage.getItem("token")
+      const res = await fetch(`http://localhost:8080/api/v1/citizens/${nic.trim()}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!res.ok) {
+        setNicLookupStatus("not-found")
+        return
+      }
+      const c = await res.json()
+      // Pre-fill all matching form fields from citizen registry
+      const fills: Record<string, string> = {}
+      if (c.fullNameSinhala)   fills.nameOfficialLang      = c.fullNameSinhala
+      if (c.fullName)          fills.nameEnglish           = c.fullName
+      if (c.dobYear)           fills.dobYear               = String(c.dobYear)
+      if (c.dobMonth)          fills.dobMonth              = String(c.dobMonth)
+      if (c.dobDay)            fills.dobDay                = String(c.dobDay)
+      if (c.ageYears != null)  fills.ageYears              = String(c.ageYears)
+      if (c.ageMonths != null) fills.ageMonths             = String(c.ageMonths)
+      if (c.ageDays != null)   fills.ageDays               = String(c.ageDays)
+      if (c.gender)            fills.deceasedGender        = c.gender
+      if (c.ethnicity)         fills.deceasedRace          = c.ethnicity
+      if (c.address)           fills.permAddressFullText   = c.address
+      if (c.addressDistrict)   fills.permAddressDistrict   = c.addressDistrict
+      if (c.addressDivision)   fills.permAddressDs         = c.addressDivision
+      if (c.addressGnDivision) fills.permAddressGn         = c.addressGnDivision
+      if (c.occupation)        fills.profession            = c.occupation
+      Object.entries(fills).forEach(([k, v]) => onChange(k, v))
+      setNicLookupStatus("found")
+    } catch {
+      setNicLookupStatus("not-found")
+    }
+  }
   return (
     <fieldset className="space-y-6">
       <legend className="text-base font-semibold text-foreground border-b border-border pb-2 w-full">
@@ -48,14 +87,32 @@ export function PersonDepartedSection({ formData, onChange }: PersonDepartedSect
           <span className="text-muted-foreground mr-1.5">(9)</span>
           Identification Number (Sri Lankan NIC)
         </Label>
-        <Input
-          id="deceasedNic"
-          name="deceasedNic"
-          placeholder="NIC Number"
-          value={formData.deceasedNic || ""}
-          onChange={(e) => onChange("deceasedNic", e.target.value)}
-          className="max-w-sm"
-        />
+        <div className="flex items-center gap-3 max-w-sm">
+          <Input
+            id="deceasedNic"
+            name="deceasedNic"
+            placeholder="NIC Number"
+            value={formData.deceasedNic || ""}
+            onChange={(e) => {
+              onChange("deceasedNic", e.target.value)
+              setNicLookupStatus("idle")
+            }}
+            onBlur={(e) => handleNicBlur(e.target.value)}
+            className="flex-1"
+          />
+          {nicLookupStatus === "loading" && (
+            <span className="text-xs text-blue-500 whitespace-nowrap">Looking up...</span>
+          )}
+          {nicLookupStatus === "found" && (
+            <span className="text-xs text-green-600 whitespace-nowrap">✓ Details filled</span>
+          )}
+          {nicLookupStatus === "not-found" && (
+            <span className="text-xs text-amber-600 whitespace-nowrap">NIC not found</span>
+          )}
+        </div>
+        {nicLookupStatus === "found" && (
+          <p className="text-xs text-green-600">Registry data auto-filled below. Review and correct if needed.</p>
+        )}
       </div>
 
       {/* (10) Foreigner Details */}
