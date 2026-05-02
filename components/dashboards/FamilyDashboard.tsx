@@ -30,7 +30,7 @@ function numberOrNull(value: string) {
 }
 
 export function FamilyDashboard() {
-  const { token } = useAuth();
+  const { token, currentUsername } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -46,6 +46,12 @@ export function FamilyDashboard() {
 
   const [doctorIdInputs, setDoctorIdInputs] = useState<Record<number, string>>({});
   const [assigningDoctor, setAssigningDoctor] = useState<number | null>(null);
+  const [nicLookupStatus, setNicLookupStatus] = useState<"idle" | "loading" | "found" | "not-found">("idle");
+  const [otpStep, setOtpStep] = useState(false);
+  const [submissionOtp, setSubmissionOtp] = useState("");
+  const [sendingOtp, setSendingOtp] = useState(false);
+  const [devSubmissionOtp, setDevSubmissionOtp] = useState<string | null>(null);
+  const [showDevSubmissionOtp, setShowDevSubmissionOtp] = useState(false);
 
   const completedCases = useMemo(
     () => cases.filter((caseItem) => caseItem.status === "CR2_ISSUED_CLOSED"),
@@ -86,11 +92,8 @@ export function FamilyDashboard() {
     }
   }, [token]);
 
-  const handleCreateCase = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmittingCase(true);
-
-    const parsed = canonicalFamilyReportSchema.safeParse({
+  const buildParsed = () =>
+    canonicalFamilyReportSchema.safeParse({
       ...familyReport,
       doctorId: familyReport.doctorId?.trim() || null,
       deceased: {
@@ -113,9 +116,7 @@ export function FamilyDashboard() {
         familyNarrative: familyReport.death.familyNarrative?.trim() || null,
         burialOrCremationPlace: familyReport.death.burialOrCremationPlace?.trim() || null,
       },
-      maternal: {
-        ...familyReport.maternal,
-      },
+      maternal: { ...familyReport.maternal },
       informant: {
         ...familyReport.informant,
         otherCapacityText: familyReport.informant.otherCapacityText?.trim() || null,
@@ -124,6 +125,10 @@ export function FamilyDashboard() {
       },
     });
 
+  const handleCreateCase = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const parsed = buildParsed();
     if (!parsed.success) {
       const issue = parsed.error.issues[0];
       toast({
@@ -131,26 +136,42 @@ export function FamilyDashboard() {
         description: issue?.message || "Please complete the required fields.",
         variant: "destructive",
       });
-      setSubmittingCase(false);
       return;
     }
 
+    // Phase 1: validate form → send OTP → show OTP input
+    if (!otpStep) {
+      setSendingOtp(true);
+      try {
+        await fetch("http://localhost:8080/api/v1/auth/send-otp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: currentUsername }),
+        });
+        setOtpStep(true);
+        setShowDevSubmissionOtp(false);
+        setDevSubmissionOtp(null);
+        toast({ title: "OTP Sent", description: "A verification code has been sent to your registered phone number." });
+      } catch {
+        toast({ title: "Error", description: "Failed to send OTP. Please try again.", variant: "destructive" });
+      } finally {
+        setSendingOtp(false);
+      }
+      return;
+    }
+
+    // Phase 2: submit with OTP
+    setSubmittingCase(true);
     try {
-      await createCase({ familyReport: parsed.data }, token);
+      await createCase({ familyReport: parsed.data, submissionOtp }, token);
       setShowCreateForm(false);
       setFamilyReport(createInitialFamilyReport());
+      setOtpStep(false);
+      setSubmissionOtp("");
       await fetchCases();
-
-      toast({
-        title: "Case Created",
-        description: "Your death report has been submitted successfully.",
-      });
+      toast({ title: "Case Created", description: "Your death report has been submitted successfully." });
     } catch (err: any) {
-      toast({
-        title: "Submission Failed",
-        description: err.message || "Error creating case.",
-        variant: "destructive",
-      });
+      toast({ title: "Submission Failed", description: err.message || "Error creating case.", variant: "destructive" });
     } finally {
       setSubmittingCase(false);
     }
@@ -208,6 +229,35 @@ export function FamilyDashboard() {
   const goToCemeteryBooking = (caseId?: number) => {
     const target = caseId ? `/family/cemetery-booking?caseId=${caseId}` : "/family/cemetery-booking";
     router.push(target);
+  };
+
+  const handleNicBlur = async (nic: string) => {
+    if (!nic || nic.trim().length < 9) return;
+    setNicLookupStatus("loading");
+    try {
+      const res = await fetch(`http://localhost:8080/api/v1/citizens/${nic.trim()}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) { setNicLookupStatus("not-found"); return; }
+      const c = await res.json();
+      if (c.fullNameSinhala)   updateDeceased("fullNameOfficialLanguage", c.fullNameSinhala);
+      if (c.fullName)          updateDeceased("fullNameEnglish", c.fullName);
+      if (c.dateOfBirth)       updateDeceased("dateOfBirth", c.dateOfBirth);
+      if (c.ageYears != null)  updateDeceased("ageYears", c.ageYears);
+      if (c.ageMonths != null) updateDeceased("ageMonths", c.ageMonths);
+      if (c.ageDays != null)   updateDeceased("ageDays", c.ageDays);
+      if (c.nationality)       updateDeceased("nationality", c.nationality);
+      if (c.gender)            updateDeceased("gender", c.gender.toUpperCase() as "MALE" | "FEMALE");
+      if (c.ethnicity)         updateDeceased("race", c.ethnicity);
+      if (c.occupation)        updateDeceased("profession", c.occupation);
+      if (c.address)           updatePermanentAddress("fullText", c.address);
+      if (c.addressDistrict)   updatePermanentAddress("district", c.addressDistrict);
+      if (c.addressDivision)   updatePermanentAddress("dsDivision", c.addressDivision);
+      if (c.addressGnDivision) updatePermanentAddress("gnDivision", c.addressGnDivision);
+      setNicLookupStatus("found");
+    } catch {
+      setNicLookupStatus("not-found");
+    }
   };
 
   const updateReport = <K extends keyof CanonicalFamilyReport>(key: K, value: CanonicalFamilyReport[K]) => {
@@ -414,9 +464,13 @@ export function FamilyDashboard() {
                   <input
                     type="text"
                     value={familyReport.deceased.nic || ""}
-                    onChange={(e) => updateDeceased("nic", e.target.value)}
+                    onChange={(e) => { updateDeceased("nic", e.target.value); setNicLookupStatus("idle"); }}
+                    onBlur={(e) => void handleNicBlur(e.target.value)}
                     className="mt-1 block w-full rounded-md border border-gray-300 p-2"
                   />
+                  {nicLookupStatus === "loading" && <p className="mt-1 text-xs text-blue-500">Looking up citizen registry...</p>}
+                  {nicLookupStatus === "found" && <p className="mt-1 text-xs text-green-600">✓ Details filled from national registry. Review and correct if needed.</p>}
+                  {nicLookupStatus === "not-found" && <p className="mt-1 text-xs text-amber-600">NIC not found in registry — please fill in details manually.</p>}
                 </div>
               )}
               {familyReport.deceased.identificationStatus === "IDENTIFIED_FOREIGNER" && (
@@ -884,11 +938,89 @@ export function FamilyDashboard() {
             </label>
           </section>
 
+          {/* ── OTP verification step ── */}
+          {otpStep && (
+            <section className="space-y-4 border-t border-blue-200 pt-4">
+              <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 space-y-4">
+                <div>
+                  <p className="text-sm font-semibold text-blue-800">Verify your identity to submit</p>
+                  <p className="text-sm text-blue-700 mt-1">A 6-digit code has been sent to your registered phone. Enter it below to confirm this death report.</p>
+                </div>
+
+                {/* Dev OTP reveal */}
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-xs font-semibold text-amber-700 mb-2">🛠 Development Mode — SMS not yet wired</p>
+                  {!showDevSubmissionOtp ? (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setShowDevSubmissionOtp(true);
+                        try {
+                          const res = await fetch(`http://localhost:8080/api/v1/auth/dev/otp/${currentUsername}`);
+                          const data = await res.json();
+                          setDevSubmissionOtp(data.otp || null);
+                        } catch {
+                          setDevSubmissionOtp(null);
+                        }
+                      }}
+                      className="text-xs font-bold text-amber-800 underline hover:text-amber-900"
+                    >
+                      Show OTP from server
+                    </button>
+                  ) : (
+                    <p className="text-sm font-mono font-bold text-amber-900 tracking-widest">
+                      {devSubmissionOtp ?? "Loading..."}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">6-Digit OTP</label>
+                  <input
+                    type="text"
+                    value={submissionOtp}
+                    onChange={(e) => setSubmissionOtp(e.target.value)}
+                    maxLength={6}
+                    placeholder="123456"
+                    className="block w-40 rounded-md border border-gray-300 p-2 text-center text-lg font-mono tracking-widest"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await fetch("http://localhost:8080/api/v1/auth/send-otp", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ username: currentUsername }),
+                    });
+                    setShowDevSubmissionOtp(false);
+                    setDevSubmissionOtp(null);
+                    toast({ title: "OTP Resent", description: "A new code has been sent to your phone." });
+                  }}
+                  className="text-xs text-blue-600 underline hover:text-blue-800"
+                >
+                  Resend OTP
+                </button>
+              </div>
+            </section>
+          )}
+
           <div className="flex gap-3">
-            <button type="submit" disabled={submittingCase} className="rounded bg-blue-600 px-5 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-60">
-              {submittingCase ? "Submitting..." : "Submit Report"}
-            </button>
-            <button type="button" onClick={() => setShowCreateForm(false)} className="rounded bg-gray-200 px-5 py-2 font-medium text-gray-800 hover:bg-gray-300">
+            {!otpStep ? (
+              <button type="submit" disabled={sendingOtp} className="rounded bg-blue-600 px-5 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-60">
+                {sendingOtp ? "Sending OTP..." : "Submit Report"}
+              </button>
+            ) : (
+              <button type="submit" disabled={submittingCase} className="rounded bg-green-600 px-5 py-2 font-medium text-white hover:bg-green-700 disabled:opacity-60">
+                {submittingCase ? "Submitting..." : "Verify & Submit"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => { setShowCreateForm(false); setOtpStep(false); setSubmissionOtp(""); }}
+              className="rounded bg-gray-200 px-5 py-2 font-medium text-gray-800 hover:bg-gray-300"
+            >
               Cancel
             </button>
           </div>

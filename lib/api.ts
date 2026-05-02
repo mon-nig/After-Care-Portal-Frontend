@@ -51,6 +51,7 @@ export interface CaseDetailResponse {
 
 export interface CreateCasePayload {
   familyReport: CanonicalFamilyReport;
+  submissionOtp: string;
 }
 
 export interface IssueB12Payload {
