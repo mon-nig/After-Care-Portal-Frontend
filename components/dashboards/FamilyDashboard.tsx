@@ -902,16 +902,25 @@ export function FamilyDashboard() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Mobile <span className="text-red-500">*</span></label>
-                <input
-                  id="informant.mobile"
-                  type="tel"
-                  value={familyReport.informant.mobile}
-                  onChange={(e) => updateInformant("mobile", e.target.value.replace(/[^\d+]/g, ""))}
-                  placeholder="+947XXXXXXXX"
-                  className="mt-1 block w-full rounded-md border border-gray-300 p-2"
-                  pattern="^\+947\d{8}$"
-                  title="Mobile must be in format +947 followed by 8 digits"
-                />
+                <div className="relative mt-1 rounded-md shadow-sm">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                    <span className="text-gray-500 sm:text-sm">+947</span>
+                  </div>
+                  <input
+                    id="informant.mobile"
+                    type="tel"
+                    value={familyReport.informant.mobile.replace(/^\+947/, "")}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, "");
+                      updateInformant("mobile", digits ? `+947${digits}` : "+947");
+                    }}
+                    placeholder="XXXXXXXX"
+                    maxLength={8}
+                    className="block w-full rounded-md border border-gray-300 py-2 pl-14 pr-3 focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    pattern="^\d{8}$"
+                    title="Please enter the remaining 8 digits"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Landline</label>
